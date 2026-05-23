@@ -1,0 +1,25 @@
+; Engine configuration file.
+config_version=5
+
+[application]
+
+config/name="Nim"
+config/description="Misère Nim — last pearl loses"
+run/main_scene="res://main.tscn"
+config/features=PackedStringArray("4.4", "Forward Plus")
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=800
+window/size/initial_screen=0
+window/size/maximized=true
+window/dpi/allow_hidpi=true
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[rendering]
+
+environment/defaults/default_clear_color=Color(0.102, 0.102, 0.18, 1)
+textures/canvas_textures/default_texture_filter=3
+textures/vram_compression/import_etc2_astc=true
