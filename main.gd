@@ -186,12 +186,15 @@ func _refresh_pearls() -> void:
 			var is_selected: bool = (ri == selected_row) and (i in selected_indices)
 			if is_removed:
 				p.state = Pearl.State.REMOVED
-			elif game_over or not player_turn:
-				p.state = Pearl.State.DISABLED
-			elif is_selected:
-				p.state = Pearl.State.SELECTED
+				p.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			else:
-				p.state = Pearl.State.ACTIVE
+				p.mouse_filter = Control.MOUSE_FILTER_STOP
+				if game_over or not player_turn:
+					p.state = Pearl.State.DISABLED
+				elif is_selected:
+					p.state = Pearl.State.SELECTED
+				else:
+					p.state = Pearl.State.ACTIVE
 
 func _on_pearl_clicked(ri: int, slot_index: int) -> void:
 	if not player_turn or game_over:
