@@ -123,7 +123,7 @@ func _build_ui() -> void:
 
 	var new_btn := Button.new()
 	new_btn.text = "New game"
-	new_btn.pressed.connect(_init_game)
+	new_btn.pressed.connect(func(): _init_game(true))
 	controls.add_child(new_btn)
 
 	var rules := Label.new()
@@ -135,14 +135,14 @@ func _build_ui() -> void:
 
 	_refresh_diff_buttons()
 
-func _init_game() -> void:
+func _init_game(randomize_first: bool = false) -> void:
 	rows.clear()
 	for v in START:
 		rows.append(v)
 	selected_row = -1
 	selected_indices.clear()
 	game_over = false
-	player_turn = randi() % 2 == 0
+	player_turn = not randomize_first or randi() % 2 == 0
 	game_started = false
 	game_gen += 1
 	confirm_btn.visible = false
