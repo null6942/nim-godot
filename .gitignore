@@ -1,6 +1,9 @@
 # Godot build artifacts
 .godot/
-builds/
+builds/mac/
+builds/linux/
+builds/windows/
+builds/*.zip
 *.uid
 *.import
 
