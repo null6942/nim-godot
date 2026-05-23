@@ -142,13 +142,20 @@ func _init_game() -> void:
 	selected_row = -1
 	selected_indices.clear()
 	game_over = false
-	player_turn = true
+	player_turn = randi() % 2 == 0
 	game_started = false
 	game_gen += 1
 	confirm_btn.visible = false
 	_refresh_diff_buttons()
 	_build_board()
-	_set_status("Your turn — click pearls to select, then confirm.")
+	if player_turn:
+		_set_status("Your turn — click pearls to select, then confirm.")
+	else:
+		_set_status("Computer goes first…")
+		var gen := game_gen
+		await get_tree().create_timer(0.7).timeout
+		if game_gen == gen:
+			_ai_move()
 
 func _build_board() -> void:
 	for c in board_box.get_children():
