@@ -2,6 +2,8 @@
 
 Misère Nim built in Godot 4. The player forced to take the last pearl loses.
 
+![Gameplay screenshot](screenshot.png)
+
 ## Rules
 
 - Four rows of pearls: 2, 3, 5, 7
@@ -22,4 +24,4 @@ Difficulty can only be changed before the first move of each game.
 
 Requires [Godot 4.4+](https://godotengine.org/) with export templates installed.
 
-Export presets are included for macOS (universal), Windows (x86_64), and Web (WASM).
+Export presets are included for macOS (universal), Windows (x86_64), Linux (x86_64), and Web (WASM).
