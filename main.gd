@@ -28,7 +28,8 @@ var diff_btns: Array = []
 var pearls: Array = []
 
 func _ready() -> void:
-	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_MAXIMIZED)
+	if not OS.has_feature("web"):
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_MAXIMIZED)
 	_build_ui()
 	_init_game()
 
@@ -42,13 +43,13 @@ func _build_ui() -> void:
 	var outer := VBoxContainer.new()
 	outer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	outer.alignment = BoxContainer.ALIGNMENT_CENTER
-	outer.add_theme_constant_override("separation", 18)
+	outer.add_theme_constant_override("separation", 10)
 	outer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(outer)
 
 	var title := Label.new()
 	title.text = "NIM"
-	title.add_theme_font_size_override("font_size", 72)
+	title.add_theme_font_size_override("font_size", 52)
 	title.add_theme_color_override("font_color", ACCENT)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	outer.add_child(title)
@@ -81,10 +82,10 @@ func _build_ui() -> void:
 	panel_style.shadow_color = Color(0, 0, 0, 0.6)
 	panel_style.shadow_size = 24
 	panel_style.shadow_offset = Vector2(0, 6)
-	panel_style.content_margin_left   = 48
-	panel_style.content_margin_right  = 48
-	panel_style.content_margin_top    = 32
-	panel_style.content_margin_bottom = 32
+	panel_style.content_margin_left   = 24
+	panel_style.content_margin_right  = 24
+	panel_style.content_margin_top    = 20
+	panel_style.content_margin_bottom = 20
 
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", panel_style)
@@ -92,21 +93,21 @@ func _build_ui() -> void:
 	outer.add_child(panel)
 
 	var inner := VBoxContainer.new()
-	inner.add_theme_constant_override("separation", 18)
+	inner.add_theme_constant_override("separation", 12)
 	panel.add_child(inner)
 
 	status_label = Label.new()
 	status_label.add_theme_color_override("font_color", ACCENT)
-	status_label.add_theme_font_size_override("font_size", 18)
+	status_label.add_theme_font_size_override("font_size", 14)
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	status_label.custom_minimum_size.y = 28
+	status_label.custom_minimum_size.y = 20
 	inner.add_child(status_label)
 
 	var board_wrap := HBoxContainer.new()
 	board_wrap.alignment = BoxContainer.ALIGNMENT_CENTER
 	inner.add_child(board_wrap)
 	board_box = VBoxContainer.new()
-	board_box.add_theme_constant_override("separation", 20)
+	board_box.add_theme_constant_override("separation", 12)
 	board_wrap.add_child(board_box)
 
 	var controls := HBoxContainer.new()
@@ -156,10 +157,10 @@ func _build_board() -> void:
 	for ri in rows.size():
 		var row := HBoxContainer.new()
 		row.alignment = BoxContainer.ALIGNMENT_BEGIN
-		row.add_theme_constant_override("separation", 12)
+		row.add_theme_constant_override("separation", 8)
 		var label := Label.new()
 		label.text = char(65 + ri)
-		label.custom_minimum_size.x = 24
+		label.custom_minimum_size.x = 16
 		label.add_theme_color_override("font_color", DIM)
 		row.add_child(label)
 		var row_pearls: Array = []

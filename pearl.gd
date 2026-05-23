@@ -5,7 +5,7 @@ signal clicked
 
 enum State { ACTIVE, SELECTED, REMOVED, DISABLED }
 
-const SIZE := 52.0
+const SIZE := 36.0
 
 const CREAM     := Color(0.93, 0.90, 0.85, 1.0)
 const MID       := Color(0.78, 0.75, 0.70, 1.0)
