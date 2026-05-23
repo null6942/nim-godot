@@ -31,7 +31,7 @@ func _ready() -> void:
 	if not OS.has_feature("web"):
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_MAXIMIZED)
 	_build_ui()
-	_init_game()
+	_set_status("Press New Game to start.")
 
 func _build_ui() -> void:
 	var bg := ColorRect.new()
