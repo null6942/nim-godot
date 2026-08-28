@@ -1,57 +1,181 @@
 class_name Pearl
-extends Control
+extends Area3D
 
 signal clicked
+signal hover_changed(on: bool)
 
-enum State { ACTIVE, SELECTED, REMOVED, DISABLED }
+enum Phase { IDLE, REMOVING, REMOVED }
 
-const SIZE := 36.0
+const RADIUS := 0.18
 
-const CREAM     := Color(0.93, 0.90, 0.85, 1.0)
-const MID       := Color(0.78, 0.75, 0.70, 1.0)
-const BLUE_TINT := Color(0.80, 0.88, 0.96, 1.0)
-const GOLD      := Color("f0c040")
-const GOLD_DIM  := Color(0.94, 0.75, 0.10, 1.0)
-
-var state: int = State.ACTIVE:
+var row := 0
+var selected := false:
 	set(v):
-		state = v
-		queue_redraw()
+		selected = v
+		_apply_visual()
+var hovered := false
+var dimmed := false:
+	set(v):
+		dimmed = v
+		_apply_visual()
+var hue_shift := 0.0
+var phase: int = Phase.IDLE
+var mesh_instance: MeshInstance3D
+var ring: MeshInstance3D
+var _mat: ShaderMaterial
+var _ring_mat: StandardMaterial3D
+var _shape: CollisionShape3D
+var _fallback_mat: StandardMaterial3D
 
 func _ready() -> void:
-	custom_minimum_size = Vector2(SIZE, SIZE)
-	mouse_filter = MOUSE_FILTER_STOP
+	var sphere := SphereMesh.new()
+	sphere.radius = RADIUS
+	sphere.height = RADIUS * 2.0
+	sphere.radial_segments = 48
+	sphere.rings = 24
+	mesh_instance = MeshInstance3D.new()
+	mesh_instance.mesh = sphere
+	mesh_instance.scale = Vector3(1.0, 0.94, 1.0)
+	add_child(mesh_instance)
 
-func _draw() -> void:
-	var c := Vector2(SIZE * 0.5, SIZE * 0.5)
-	var r := SIZE * 0.5 - 3.0
-
-	if state == State.REMOVED:
-		return
-
-	var selected := state == State.SELECTED
-
-	draw_circle(c + Vector2(1.5, 2.5), r, Color(0, 0, 0, 0.4))
-
-	if selected:
-		draw_arc(c, r + 6.0, 0.0, TAU, 64, Color(GOLD.r, GOLD.g, GOLD.b, 0.25), 5.0, true)
-		draw_arc(c, r + 3.0, 0.0, TAU, 64, Color(GOLD.r, GOLD.g, GOLD.b, 0.55), 3.0, true)
-		draw_circle(c, r, Color(0.95, 0.82, 0.45, 1.0))
+	var shader: Shader = null
+	if ResourceLoader.exists("res://pearl.gdshader"):
+		shader = load("res://pearl.gdshader")
+	if shader:
+		_mat = ShaderMaterial.new()
+		_mat.shader = shader
+		_mat.set_shader_parameter("hue_shift", hue_shift)
+		mesh_instance.material_override = _mat
 	else:
-		draw_circle(c, r, CREAM)
+		_fallback_mat = StandardMaterial3D.new()
+		_fallback_mat.roughness = 0.10
+		_fallback_mat.metallic = 0.28
+		mesh_instance.material_override = _fallback_mat
 
-	draw_circle(c + Vector2(r * 0.12, r * 0.18), r * 0.88, Color(MID.r, MID.g, MID.b, 0.45))
-	draw_circle(c + Vector2(r * 0.28, -r * 0.08), r * 0.58, Color(BLUE_TINT.r, BLUE_TINT.g, BLUE_TINT.b, 0.28))
+	_ring_mat = StandardMaterial3D.new()
+	_ring_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_ring_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_ring_mat.albedo_color = Color(0.93, 0.76, 0.32, 0.0)
+	_ring_mat.emission_enabled = true
+	_ring_mat.emission = Color(0.93, 0.76, 0.32)
+	_ring_mat.emission_energy_multiplier = 1.4
+	_ring_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var torus := TorusMesh.new()
+	torus.inner_radius = RADIUS * 1.18
+	torus.outer_radius = RADIUS * 1.40
+	torus.rings = 18
+	torus.ring_segments = 28
+	ring = MeshInstance3D.new()
+	ring.mesh = torus
+	ring.material_override = _ring_mat
+	ring.position = Vector3(0, -RADIUS * 0.94 + 0.014, 0)
+	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(ring)
 
-	var h := c + Vector2(-r * 0.27, -r * 0.30)
-	draw_circle(h, r * 0.46, Color(1, 1, 1, 0.72))
-	draw_circle(h + Vector2(-r * 0.09, -r * 0.09), r * 0.16, Color(1, 1, 1, 1.0))
+	var blob_mat := StandardMaterial3D.new()
+	blob_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	blob_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	blob_mat.albedo_color = Color(0.02, 0.03, 0.02, 0.38)
+	blob_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var blob_mesh := CylinderMesh.new()
+	blob_mesh.top_radius = RADIUS * 0.92
+	blob_mesh.bottom_radius = RADIUS * 0.92
+	blob_mesh.height = 0.01
+	blob_mesh.radial_segments = 20
+	var blob := MeshInstance3D.new()
+	blob.mesh = blob_mesh
+	blob.material_override = blob_mat
+	blob.position = Vector3(0, -RADIUS * 0.94 + 0.006, 0)
+	blob.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(blob)
 
-	if selected:
-		draw_arc(c, r + 2.0, 0.0, TAU, 64, GOLD, 2.5, true)
+	_shape = CollisionShape3D.new()
+	var ss := SphereShape3D.new()
+	ss.radius = RADIUS * 1.08
+	_shape.shape = ss
+	add_child(_shape)
+	collision_layer = 1
+	collision_mask = 0
+	monitoring = false
+	monitorable = true
+	input_ray_pickable = true
+	mouse_entered.connect(func():
+		hovered = true
+		hover_changed.emit(true)
+		_apply_visual()
+	)
+	mouse_exited.connect(func():
+		hovered = false
+		hover_changed.emit(false)
+		_apply_visual()
+	)
+	input_event.connect(_on_input_event)
+	_apply_visual()
 
-func _gui_input(event: InputEvent) -> void:
+func _on_input_event(_camera: Node, event: InputEvent, _pos: Vector3, _normal: Vector3, _shape_idx: int) -> void:
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		if state == State.ACTIVE or state == State.SELECTED:
+		if phase == Phase.IDLE:
 			clicked.emit()
-			accept_event()
+
+func set_pickable(on: bool) -> void:
+	input_ray_pickable = on and phase == Phase.IDLE
+	if _shape:
+		_shape.disabled = not input_ray_pickable
+
+func _apply_visual() -> void:
+	if phase == Phase.REMOVED or phase == Phase.REMOVING:
+		if ring:
+			ring.visible = false
+		return
+	var sel := 1.0 if selected else 0.0
+	var hov := 1.0 if hovered else 0.0
+	var dim := 1.0 if dimmed else 0.0
+	if _mat:
+		_mat.set_shader_parameter("selected", sel)
+		_mat.set_shader_parameter("hovered", hov)
+		_mat.set_shader_parameter("dimmed", dim)
+		_mat.set_shader_parameter("hue_shift", hue_shift)
+	elif _fallback_mat:
+		if selected:
+			_fallback_mat.albedo_color = Color(0.95, 0.82, 0.42, 1.0)
+			_fallback_mat.emission_enabled = true
+			_fallback_mat.emission = Color(0.85, 0.65, 0.15)
+			_fallback_mat.emission_energy_multiplier = 0.55
+		elif dimmed:
+			_fallback_mat.albedo_color = Color(0.72, 0.70, 0.66, 1.0)
+			_fallback_mat.emission_enabled = false
+		else:
+			_fallback_mat.albedo_color = Color(0.93, 0.90, 0.85, 1.0)
+			_fallback_mat.emission_enabled = hovered
+			if hovered:
+				_fallback_mat.emission = Color(0.85, 0.70, 0.30)
+				_fallback_mat.emission_energy_multiplier = 0.22
+	if ring and _ring_mat:
+		var show_ring := selected or hovered
+		ring.visible = show_ring
+		var alpha := 0.92 if selected else 0.42
+		_ring_mat.albedo_color = Color(0.93, 0.76, 0.32, alpha)
+		_ring_mat.emission_energy_multiplier = 2.1 if selected else 0.7
+		ring.scale = Vector3(1.08, 1.0, 1.08) if selected else Vector3.ONE
+
+func animate_select_pulse() -> void:
+	var tw := create_tween()
+	tw.tween_property(self, "scale", Vector3(1.08, 1.08, 1.08), 0.08).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_property(self, "scale", Vector3.ONE, 0.14).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+
+func animate_remove() -> Signal:
+	phase = Phase.REMOVING
+	selected = false
+	hovered = false
+	set_pickable(false)
+	if ring:
+		ring.visible = false
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(self, "scale", Vector3(0.04, 0.04, 0.04), 0.32).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
+	tw.tween_property(self, "position:y", position.y + 0.32, 0.2).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.finished.connect(func():
+		visible = false
+		phase = Phase.REMOVED
+	)
+	return tw.finished

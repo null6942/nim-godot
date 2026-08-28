@@ -4,6 +4,9 @@ builds/mac/
 builds/linux/
 builds/windows/
 builds/*.zip
+builds/web/nim*.js
+builds/web/nim*.pck
+builds/web/nim*.wasm
 *.uid
 *.import
 

@@ -1,293 +1,876 @@
-extends Control
+extends Node
 
-const START := [2, 3, 5, 7]
-const ACCENT    := Color("f0c040")
-const DIM       := Color("888888")
-const MUTED     := Color("aaaaaa")
-const FAINT     := Color("666666")
-const FELT      := Color(0.08, 0.20, 0.14, 1.0)   # dark green baize
-const FELT_EDGE := Color(0.05, 0.13, 0.09, 1.0)
+const START := [1, 3, 5, 7] # Marienbad tableau: four unequal heaps
+const PEARL_GAP := 0.78
+const ROW_Z := [-1.95, -0.65, 0.65, 1.95]
+const FELT_TOP := 0.06
+
+const GOLD := Color("e8c056")
+const GOLD_DIM := Color("c9a24a")
+const INK := Color("1a140c")
+const MUTED := Color(0.78, 0.74, 0.66, 1.0)
+const FAINT := Color(0.55, 0.52, 0.46, 1.0)
+const ROOM := Color(0.035, 0.032, 0.03, 1.0)
+const BTN_BG := Color(0.10, 0.12, 0.11, 0.92)
+const BTN_HOVER := Color(0.16, 0.18, 0.16, 0.95)
 
 enum Difficulty { EASY, MEDIUM, HARD }
-const OPTIMAL_CHANCE := [0.25, 0.60, 1.0]  # indexed by Difficulty enum
-const DIFF_COLORS := [Color("4caf50"), Color("f0c040"), Color("e53935")]  # green / yellow / red
+enum PlayMode { CLASSIC, MISERE }
+
+const OPTIMAL_CHANCE := [0.25, 0.60, 1.0]
+const DIFF_LABELS := ["Easy", "Medium", "Hard"]
+const DIFF_COLORS := [Color("7dcea0"), Color("e8c056"), Color("e07070")]
+const MODE_LABELS := ["Classic", "Misère"]
 
 var rows: Array[int] = []
-var selected_row := -1
-var selected_indices: Array = []
 var game_over := false
 var player_turn := true
 var difficulty: int = Difficulty.MEDIUM
+var play_mode: int = PlayMode.MISERE
 var game_started := false
-var game_gen := 0  # incremented on each new game; AI move bails if this changes
+var game_gen := 0
+var busy := false
+var player_took_last := false
+var last_select_row := -1
+var last_select_index := -1
 
+var font_title: Font
+var font_ui: Font
+var font_ui_bold: Font
+
+var world: Node3D
+var pearls_root: Node3D
+var table_viewport: SubViewport
+var table_wrap: Control
 var status_label: Label
-var board_box: VBoxContainer
-var confirm_btn: Button
+var subtitle: Label
+var rules_label: Label
+var result_box: VBoxContainer
+var result_title: Label
+var result_sub: Label
+var result_dim: ColorRect
+var take_btn: Button
+var mode_btns: Array = []
 var diff_btns: Array = []
 var pearls: Array = []
+var sfx_click: AudioStreamPlayer
+var sfx_take: AudioStreamPlayer
 
 func _ready() -> void:
-	if not OS.has_feature("web"):
-		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_MAXIMIZED)
+	_load_fonts()
 	_build_ui()
-	_set_status("Press New Game to start.")
+	_build_world()
+	_enter_setup()
+
+func _input(event: InputEvent) -> void:
+	if event.is_echo() or not (event is InputEventKey) or not event.pressed:
+		return
+	var key: int = event.keycode
+	if key == KEY_ESCAPE:
+		if _selected_count() > 0:
+			_clear_selection()
+			get_viewport().set_input_as_handled()
+	elif key == KEY_ENTER or key == KEY_KP_ENTER or key == KEY_SPACE:
+		if _selected_count() > 0:
+			_try_take_selected()
+			get_viewport().set_input_as_handled()
+
+func _load_fonts() -> void:
+	font_title = _font("res://fonts/Cinzel-SemiBold.ttf")
+	font_ui = _font("res://fonts/Outfit-Regular.ttf")
+	font_ui_bold = _font("res://fonts/Outfit-SemiBold.ttf")
+
+func _font(path: String) -> Font:
+	if ResourceLoader.exists(path):
+		var res = load(path)
+		if res is Font:
+			return res
+	var ff := FontFile.new()
+	if ff.load_dynamic_font(path) == OK:
+		return ff
+	return null
+
+func _load_tex(path: String) -> Texture2D:
+	if ResourceLoader.exists(path):
+		var res = load(path)
+		if res is Texture2D:
+			return res
+	var img := Image.new()
+	if img.load(path) == OK:
+		return ImageTexture.create_from_image(img)
+	return null
+
+func _apply_font(ctrl: Control, font: Font, size: int, color: Color, outline := false) -> void:
+	if font:
+		ctrl.add_theme_font_override("font", font)
+	ctrl.add_theme_font_size_override("font_size", size)
+	ctrl.add_theme_color_override("font_color", color)
+	if outline:
+		ctrl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.4))
+		ctrl.add_theme_constant_override("outline_size", 3)
+
+func _box(bg: Color, border: Color, width: int, radius: int, pad: int) -> StyleBoxFlat:
+	var s := StyleBoxFlat.new()
+	s.bg_color = bg
+	s.border_color = border
+	s.set_border_width_all(width)
+	s.set_corner_radius_all(radius)
+	s.content_margin_left = pad
+	s.content_margin_right = pad
+	s.content_margin_top = pad * 0.55
+	s.content_margin_bottom = pad * 0.55
+	return s
+
+func _style_button(btn: Button, selected: bool) -> void:
+	var normal := _box(BTN_BG, Color(0.33, 0.20, 0.10, 1), 1, 8, 14)
+	var hover := _box(BTN_HOVER, GOLD_DIM, 1, 8, 14)
+	var pressed := _box(GOLD, GOLD, 1, 8, 14)
+	var disabled := _box(Color(0.08, 0.09, 0.08, 0.85), Color(0.2, 0.18, 0.14, 1), 1, 8, 14)
+	btn.add_theme_stylebox_override("normal", pressed if selected else normal)
+	btn.add_theme_stylebox_override("hover", pressed if selected else hover)
+	btn.add_theme_stylebox_override("pressed", pressed)
+	btn.add_theme_stylebox_override("focus", pressed if selected else hover)
+	btn.add_theme_stylebox_override("disabled", disabled)
+	btn.add_theme_color_override("font_color", INK if selected else MUTED)
+	btn.add_theme_color_override("font_hover_color", INK if selected else GOLD)
+	btn.add_theme_color_override("font_pressed_color", INK)
+	btn.add_theme_color_override("font_disabled_color", FAINT)
+	if font_ui_bold:
+		btn.add_theme_font_override("font", font_ui_bold)
+	btn.add_theme_font_size_override("font_size", 15)
+	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	btn.focus_mode = Control.FOCUS_NONE
+
+func _mk_btn(text: String, toggle: bool) -> Button:
+	var btn := Button.new()
+	btn.text = text
+	btn.toggle_mode = toggle
+	btn.custom_minimum_size = Vector2(100, 36)
+	_style_button(btn, false)
+	return btn
+
+func _tex_mat(path: String, color: Color, roughness: float, metallic: float, uv: Vector3, triplanar := false) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = color
+	var tex := _load_tex(path)
+	if tex:
+		m.albedo_texture = tex
+	m.roughness = roughness
+	m.metallic = metallic
+	m.uv1_scale = uv
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	if triplanar:
+		m.uv1_triplanar = true
+		m.uv1_world_triplanar = true
+		m.uv1_triplanar_sharpness = 6.0
+	return m
+
+func _mesh_box(size: Vector3, mat: Material) -> MeshInstance3D:
+	var box := BoxMesh.new()
+	box.size = size
+	var mi := MeshInstance3D.new()
+	mi.mesh = box
+	mi.material_override = mat
+	return mi
+
+func _add_click_body(parent: Node3D, size: Vector3, pos: Vector3) -> void:
+	var body := StaticBody3D.new()
+	body.position = pos
+	body.collision_layer = 2
+	body.collision_mask = 0
+	body.input_ray_pickable = true
+	var cs := CollisionShape3D.new()
+	var sh := BoxShape3D.new()
+	sh.size = size
+	cs.shape = sh
+	body.add_child(cs)
+	body.input_event.connect(func(_c, event, _p, _n, _s):
+		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+			_on_board_clicked()
+	)
+	parent.add_child(body)
+
+func _build_world() -> void:
+	world = Node3D.new()
+	world.name = "World"
+	table_viewport.add_child(world)
+
+	var env := Environment.new()
+	env.background_mode = Environment.BG_COLOR
+	env.background_color = ROOM
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color(0.28, 0.22, 0.16)
+	env.ambient_light_energy = 0.32
+	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	env.tonemap_exposure = 1.05
+	env.glow_enabled = true
+	env.glow_intensity = 0.45
+	env.glow_bloom = 0.04
+	env.glow_hdr_threshold = 0.85
+	env.adjustment_enabled = true
+	env.adjustment_saturation = 1.08
+	env.adjustment_contrast = 1.04
+	env.fog_enabled = true
+	env.fog_light_color = Color(0.04, 0.035, 0.03)
+	env.fog_density = 0.012
+	var we := WorldEnvironment.new()
+	we.environment = env
+	world.add_child(we)
+
+	var sun := DirectionalLight3D.new()
+	sun.rotation_degrees = Vector3(-52, 28, 0)
+	sun.light_energy = 0.55
+	sun.light_color = Color(1.0, 0.95, 0.86)
+	sun.shadow_enabled = true
+	sun.directional_shadow_max_distance = 22.0
+	world.add_child(sun)
+
+	var lamp := SpotLight3D.new()
+	lamp.position = Vector3(0.0, 5.6, 0.15)
+	lamp.rotation_degrees = Vector3(-90, 0, 0)
+	lamp.light_energy = 2.4
+	lamp.light_color = Color(1.0, 0.90, 0.72)
+	lamp.spot_range = 12.0
+	lamp.spot_angle = 36.0
+	lamp.spot_attenuation = 0.6
+	lamp.shadow_enabled = true
+	world.add_child(lamp)
+
+	var fill := OmniLight3D.new()
+	fill.position = Vector3(-2.8, 3.4, 2.6)
+	fill.light_energy = 0.42
+	fill.light_color = Color(0.55, 0.68, 1.0)
+	fill.omni_range = 12.0
+	world.add_child(fill)
+
+	var rim_l := OmniLight3D.new()
+	rim_l.position = Vector3(2.4, 2.2, -2.2)
+	rim_l.light_energy = 0.38
+	rim_l.light_color = Color(1.0, 0.72, 0.38)
+	rim_l.omni_range = 9.0
+	world.add_child(rim_l)
+
+	_build_table()
+
+	pearls_root = Node3D.new()
+	pearls_root.name = "Pearls"
+	world.add_child(pearls_root)
+
+	var cam := Camera3D.new()
+	cam.position = Vector3(0.0, 7.5, 5.5)
+	cam.look_at_from_position(cam.position, Vector3(0, 0.05, 0.12), Vector3.UP)
+	cam.fov = 38.0
+	cam.current = true
+	world.add_child(cam)
+
+func _build_table() -> void:
+	var walnut := _tex_mat("res://textures/walnut.png", Color(0.92, 0.86, 0.78), 0.48, 0.04, Vector3(0.42, 0.42, 0.42), true)
+	var felt := _tex_mat("res://textures/felt.png", Color(0.95, 1.0, 0.95), 0.92, 0.0, Vector3(1, 1, 1), false)
+	var floor_m := _tex_mat("res://textures/floor.png", Color(0.55, 0.48, 0.42), 0.72, 0.02, Vector3(0.14, 0.14, 0.14), true)
+	var gold := StandardMaterial3D.new()
+	gold.albedo_color = Color(0.78, 0.58, 0.22)
+	gold.metallic = 0.88
+	gold.roughness = 0.26
+	gold.emission_enabled = true
+	gold.emission = Color(0.55, 0.38, 0.10)
+	gold.emission_energy_multiplier = 0.18
+
+	var floor_mi := _mesh_box(Vector3(22.0, 0.08, 18.0), floor_m)
+	floor_mi.position = Vector3(0, -0.72, 0)
+	world.add_child(floor_mi)
+	_add_click_body(world, Vector3(22.0, 0.08, 18.0), Vector3(0, -0.72, 0))
+
+	var apron := _mesh_box(Vector3(6.7, 0.46, 5.5), walnut)
+	apron.position = Vector3(0, -0.28, 0)
+	world.add_child(apron)
+
+	var rail_h := 0.20
+	var rail_t := 0.34
+	var rail_y := 0.08
+	var inner_w := 6.02
+	var inner_d := 4.82
+	var outer_w := inner_w + rail_t * 2.0
+	var outer_d := inner_d + rail_t * 2.0
+	var n_rail := _mesh_box(Vector3(outer_w, rail_h, rail_t), walnut)
+	n_rail.position = Vector3(0, rail_y, -(inner_d + rail_t) * 0.5)
+	world.add_child(n_rail)
+	var s_rail := _mesh_box(Vector3(outer_w, rail_h, rail_t), walnut)
+	s_rail.position = Vector3(0, rail_y, (inner_d + rail_t) * 0.5)
+	world.add_child(s_rail)
+	var w_rail := _mesh_box(Vector3(rail_t, rail_h, inner_d), walnut)
+	w_rail.position = Vector3(-(inner_w + rail_t) * 0.5, rail_y, 0)
+	world.add_child(w_rail)
+	var e_rail := _mesh_box(Vector3(rail_t, rail_h, inner_d), walnut)
+	e_rail.position = Vector3((inner_w + rail_t) * 0.5, rail_y, 0)
+	world.add_child(e_rail)
+
+	var felt_mi := _mesh_box(Vector3(inner_w, 0.045, inner_d), felt)
+	felt_mi.position = Vector3(0, FELT_TOP - 0.02, 0)
+	world.add_child(felt_mi)
+	_add_click_body(world, Vector3(inner_w, 0.08, inner_d), Vector3(0, FELT_TOP, 0))
+
+	var inlay_t := 0.045
+	var inlay_y := FELT_TOP + 0.012
+	var n_in := _mesh_box(Vector3(inner_w + 0.02, 0.02, inlay_t), gold)
+	n_in.position = Vector3(0, inlay_y, -inner_d * 0.5 + 0.03)
+	world.add_child(n_in)
+	var s_in := _mesh_box(Vector3(inner_w + 0.02, 0.02, inlay_t), gold)
+	s_in.position = Vector3(0, inlay_y, inner_d * 0.5 - 0.03)
+	world.add_child(s_in)
+	var w_in := _mesh_box(Vector3(inlay_t, 0.02, inner_d - 0.04), gold)
+	w_in.position = Vector3(-inner_w * 0.5 + 0.03, inlay_y, 0)
+	world.add_child(w_in)
+	var e_in := _mesh_box(Vector3(inlay_t, 0.02, inner_d - 0.04), gold)
+	e_in.position = Vector3(inner_w * 0.5 - 0.03, inlay_y, 0)
+	world.add_child(e_in)
+
+
+
+func _row_origin_x() -> float:
+	return -((START[START.size() - 1] - 1) * PEARL_GAP) * 0.5
+
+func _pearl_pos(_ri: int, i: int) -> Vector3:
+	return Vector3(_row_origin_x() + float(i) * PEARL_GAP, Pearl.RADIUS * 0.94 + FELT_TOP, ROW_Z[_ri])
 
 func _build_ui() -> void:
+	sfx_click = AudioStreamPlayer.new()
+	sfx_take = AudioStreamPlayer.new()
+	if ResourceLoader.exists("res://sfx/click.wav"):
+		sfx_click.stream = load("res://sfx/click.wav")
+	if ResourceLoader.exists("res://sfx/take.wav"):
+		sfx_take.stream = load("res://sfx/take.wav")
+	add_child(sfx_click)
+	add_child(sfx_take)
+
+	var root := Control.new()
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(root)
+
 	var bg := ColorRect.new()
-	bg.color = Color("080c14")
+	bg.color = ROOM
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(bg)
+	root.add_child(bg)
 
-	var outer := VBoxContainer.new()
-	outer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	outer.alignment = BoxContainer.ALIGNMENT_CENTER
-	outer.add_theme_constant_override("separation", 10)
-	outer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(outer)
+	var col := VBoxContainer.new()
+	col.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	col.offset_left = 16
+	col.offset_right = -16
+	col.offset_top = 10
+	col.offset_bottom = -12
+	col.add_theme_constant_override("separation", 8)
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(col)
+
+	var top := VBoxContainer.new()
+	top.alignment = BoxContainer.ALIGNMENT_CENTER
+	top.add_theme_constant_override("separation", 6)
+	top.mouse_filter = Control.MOUSE_FILTER_STOP
+	col.add_child(top)
 
 	var title := Label.new()
 	title.text = "NIM"
-	title.add_theme_font_size_override("font_size", 52)
-	title.add_theme_color_override("font_color", ACCENT)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	outer.add_child(title)
+	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_apply_font(title, font_title, 48, GOLD, true)
+	top.add_child(title)
 
-	var subtitle := Label.new()
-	subtitle.text = "Last pearl loses"
-	subtitle.add_theme_color_override("font_color", MUTED)
+	subtitle = Label.new()
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	outer.add_child(subtitle)
+	subtitle.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_apply_font(subtitle, font_ui, 15, MUTED)
+	top.add_child(subtitle)
+
+	var mode_row := HBoxContainer.new()
+	mode_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	mode_row.add_theme_constant_override("separation", 8)
+	mode_row.mouse_filter = Control.MOUSE_FILTER_STOP
+	top.add_child(mode_row)
+	for m in [PlayMode.CLASSIC, PlayMode.MISERE]:
+		var btn := _mk_btn(MODE_LABELS[m], false)
+		btn.custom_minimum_size = Vector2(118, 34)
+		var captured: int = m
+		btn.pressed.connect(func(): _set_play_mode(captured))
+		mode_row.add_child(btn)
+		mode_btns.append(btn)
 
 	var diff_row := HBoxContainer.new()
 	diff_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	diff_row.add_theme_constant_override("separation", 8)
-	outer.add_child(diff_row)
-	var diff_labels: Array = ["Easy", "Medium", "Hard"]
+	diff_row.mouse_filter = Control.MOUSE_FILTER_STOP
+	top.add_child(diff_row)
 	for d in [Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD]:
-		var lbl: String = diff_labels[d]
-		var btn := Button.new()
-		btn.text = lbl
-		btn.toggle_mode = true
-		btn.pressed.connect(func(): _set_difficulty(d))
+		var btn := _mk_btn(DIFF_LABELS[d], false)
+		var captured_d: int = d
+		btn.pressed.connect(func(): _set_difficulty(captured_d))
 		diff_row.add_child(btn)
 		diff_btns.append(btn)
 
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = FELT
-	panel_style.border_color = FELT_EDGE
-	panel_style.set_border_width_all(2)
-	panel_style.set_corner_radius_all(16)
-	panel_style.shadow_color = Color(0, 0, 0, 0.6)
-	panel_style.shadow_size = 24
-	panel_style.shadow_offset = Vector2(0, 6)
-	panel_style.content_margin_left   = 24
-	panel_style.content_margin_right  = 24
-	panel_style.content_margin_top    = 20
-	panel_style.content_margin_bottom = 20
+	table_wrap = Control.new()
+	table_wrap.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	table_wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	table_wrap.mouse_filter = Control.MOUSE_FILTER_STOP
+	col.add_child(table_wrap)
 
-	var panel := PanelContainer.new()
-	panel.add_theme_stylebox_override("panel", panel_style)
-	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	outer.add_child(panel)
+	var svc := SubViewportContainer.new()
+	svc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	svc.stretch = true
+	svc.mouse_filter = Control.MOUSE_FILTER_STOP
+	table_wrap.add_child(svc)
 
-	var inner := VBoxContainer.new()
-	inner.add_theme_constant_override("separation", 12)
-	panel.add_child(inner)
+	table_viewport = SubViewport.new()
+	table_viewport.transparent_bg = false
+	table_viewport.handle_input_locally = true
+	table_viewport.physics_object_picking = true
+	table_viewport.own_world_3d = true
+	table_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	table_viewport.msaa_3d = Viewport.MSAA_4X
+	table_viewport.scaling_3d_scale = 1.35
+	svc.add_child(table_viewport)
+
+	result_dim = ColorRect.new()
+	result_dim.color = Color(0, 0, 0, 0.5)
+	result_dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	result_dim.visible = false
+	result_dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	table_wrap.add_child(result_dim)
+
+	result_box = VBoxContainer.new()
+	result_box.set_anchors_preset(Control.PRESET_CENTER)
+	result_box.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	result_box.grow_vertical = Control.GROW_DIRECTION_BOTH
+	result_box.offset_left = -220
+	result_box.offset_right = 220
+	result_box.offset_top = -70
+	result_box.offset_bottom = 70
+	result_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	result_box.add_theme_constant_override("separation", 6)
+	result_box.visible = false
+	result_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	table_wrap.add_child(result_box)
+	result_title = Label.new()
+	result_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	result_title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_apply_font(result_title, font_title, 40, GOLD, true)
+	result_box.add_child(result_title)
+	result_sub = Label.new()
+	result_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	result_sub.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_apply_font(result_sub, font_ui, 16, MUTED)
+	result_box.add_child(result_sub)
+
+	var bottom := VBoxContainer.new()
+	bottom.alignment = BoxContainer.ALIGNMENT_CENTER
+	bottom.add_theme_constant_override("separation", 6)
+	bottom.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(bottom)
 
 	status_label = Label.new()
-	status_label.add_theme_color_override("font_color", ACCENT)
-	status_label.add_theme_font_size_override("font_size", 14)
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	status_label.custom_minimum_size.y = 20
-	inner.add_child(status_label)
+	status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	status_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	status_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_apply_font(status_label, font_ui, 17, GOLD)
+	bottom.add_child(status_label)
 
-	var board_wrap := HBoxContainer.new()
-	board_wrap.alignment = BoxContainer.ALIGNMENT_CENTER
-	inner.add_child(board_wrap)
-	board_box = VBoxContainer.new()
-	board_box.add_theme_constant_override("separation", 12)
-	board_wrap.add_child(board_box)
+	rules_label = Label.new()
+	rules_label.visible = false
+	rules_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bottom.add_child(rules_label)
 
-	var controls := HBoxContainer.new()
-	controls.alignment = BoxContainer.ALIGNMENT_CENTER
-	controls.add_theme_constant_override("separation", 12)
-	inner.add_child(controls)
+	var new_row := HBoxContainer.new()
+	new_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	new_row.add_theme_constant_override("separation", 12)
+	bottom.add_child(new_row)
+	take_btn = _mk_btn("Take selected", false)
+	take_btn.custom_minimum_size = Vector2(168, 40)
+	take_btn.pressed.connect(_try_take_selected)
+	new_row.add_child(take_btn)
+	var new_btn := _mk_btn("New game", false)
+	new_btn.custom_minimum_size = Vector2(150, 40)
+	_style_button(new_btn, true)
+	new_btn.pressed.connect(_on_new_game)
+	new_row.add_child(new_btn)
 
-	confirm_btn = Button.new()
-	confirm_btn.text = "Remove selected"
-	confirm_btn.pressed.connect(_on_confirm)
-	confirm_btn.visible = false
-	controls.add_child(confirm_btn)
-
-	var new_btn := Button.new()
-	new_btn.text = "New game"
-	new_btn.pressed.connect(func(): _init_game(true))
-	controls.add_child(new_btn)
-
-	var rules := Label.new()
-	rules.text = "Click pearls in one row to select them. You must remove at least one.\nThe player forced to take the last pearl loses."
-	rules.add_theme_color_override("font_color", FAINT)
-	rules.add_theme_font_size_override("font_size", 12)
-	rules.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	outer.add_child(rules)
-
+	_refresh_mode_buttons()
 	_refresh_diff_buttons()
+	_refresh_take_button()
+	_refresh_copy()
 
-func _init_game(randomize_first: bool = false) -> void:
+func _options_locked() -> bool:
+	return game_started and not game_over
+
+func _is_setup() -> bool:
+	return not game_started and not game_over
+
+func _setup_status() -> String:
+	return "Choose Classic or Misere and a difficulty, then press New game."
+
+func _your_turn_status() -> String:
+	return "Your turn - select pearls in one row, then Take."
+
+func _refresh_copy() -> void:
+	if play_mode == PlayMode.CLASSIC:
+		subtitle.text = "Last pearl wins"
+	else:
+		subtitle.text = "Last pearl loses"
+	rules_label.visible = false
+	rules_label.text = ""
+
+func _reset_board_state() -> void:
+	game_gen += 1
+	busy = false
 	rows.clear()
 	for v in START:
 		rows.append(v)
-	selected_row = -1
-	selected_indices.clear()
 	game_over = false
-	player_turn = not randomize_first or randi() % 2 == 0
-	game_started = false
-	game_gen += 1
-	confirm_btn.visible = false
-	_refresh_diff_buttons()
-	_build_board()
-	if player_turn:
-		_set_status("Your turn — click pearls to select, then confirm.")
+	player_took_last = false
+	last_select_row = -1
+	last_select_index = -1
+	result_box.visible = false
+	result_dim.visible = false
+	status_label.visible = true
+	rules_label.visible = false
+
+func _on_new_game() -> void:
+	_play_click()
+	if _is_setup():
+		_start_match()
 	else:
-		_set_status("Computer goes first…")
-		var gen := game_gen
-		await get_tree().create_timer(0.7).timeout
-		if game_gen == gen:
-			_ai_move()
+		_enter_setup()
+
+func _enter_setup() -> void:
+	_reset_board_state()
+	game_started = false
+	player_turn = false
+	_refresh_mode_buttons()
+	_refresh_diff_buttons()
+	_refresh_copy()
+	_build_board()
+	_refresh_take_button()
+	_set_status(_setup_status())
+
+func _start_match() -> void:
+	_reset_board_state()
+	game_started = true
+	player_turn = randi() % 2 == 0
+	_refresh_mode_buttons()
+	_refresh_diff_buttons()
+	_refresh_copy()
+	_build_board()
+	_refresh_take_button()
+	if player_turn:
+		_set_status(_your_turn_status())
+		return
+	_set_status("Computer goes first...")
+	_refresh_pearls()
+	var gen := game_gen
+	await get_tree().create_timer(0.7).timeout
+	if game_gen == gen:
+		await _ai_move()
 
 func _build_board() -> void:
-	for c in board_box.get_children():
+	for c in pearls_root.get_children():
 		c.queue_free()
 	pearls.clear()
-	for ri in rows.size():
-		var row := HBoxContainer.new()
-		row.alignment = BoxContainer.ALIGNMENT_BEGIN
-		row.add_theme_constant_override("separation", 8)
-		var label := Label.new()
-		label.text = char(65 + ri)
-		label.custom_minimum_size.x = 16
-		label.add_theme_color_override("font_color", DIM)
-		row.add_child(label)
+	var label_x: float = _row_origin_x() - 0.46
+	for ri in START.size():
+		var tag := Label3D.new()
+		tag.text = char(65 + ri)
+		tag.font_size = 42
+		tag.pixel_size = 0.0045
+		tag.modulate = Color(0.90, 0.78, 0.42)
+		tag.outline_modulate = Color(0, 0, 0, 0.55)
+		tag.outline_size = 8
+		tag.position = Vector3(label_x, FELT_TOP + 0.10, ROW_Z[ri])
+		tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		pearls_root.add_child(tag)
 		var row_pearls: Array = []
-		var n: int = START[ri]
-		for i in n:
+		for i in START[ri]:
 			var p := Pearl.new()
-			var ri_c: int = ri
-			var i_c: int = i
-			p.clicked.connect(func(): _on_pearl_clicked(ri_c, i_c))
-			row.add_child(p)
+			p.row = ri
+			p.hue_shift = randf_range(-0.045, 0.045)
+			p.position = _pearl_pos(ri, i)
+			p.clicked.connect(func(): _on_pearl_clicked(p))
+			pearls_root.add_child(p)
 			row_pearls.append(p)
-		board_box.add_child(row)
 		pearls.append(row_pearls)
 	_refresh_pearls()
 
 func _refresh_pearls() -> void:
+	var sel_row := _selected_row()
 	for ri in pearls.size():
 		var count: int = rows[ri]
 		var row_arr: Array = pearls[ri]
 		for i in row_arr.size():
 			var p: Pearl = row_arr[i]
-			var is_removed: bool = i >= count
-			var is_selected: bool = (ri == selected_row) and (i in selected_indices)
-			if is_removed:
-				p.state = Pearl.State.REMOVED
-				p.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			else:
-				p.mouse_filter = Control.MOUSE_FILTER_STOP
-				if game_over or not player_turn:
-					p.state = Pearl.State.DISABLED
-				elif is_selected:
-					p.state = Pearl.State.SELECTED
-				else:
-					p.state = Pearl.State.ACTIVE
+			if p.phase == Pearl.Phase.REMOVING:
+				continue
+			if i >= count:
+				p.phase = Pearl.Phase.REMOVED
+				p.visible = false
+				p.set_pickable(false)
+				continue
+			p.visible = true
+			var playable := game_started and player_turn and not game_over and not busy
+			p.dimmed = not playable or (sel_row >= 0 and ri != sel_row)
+			p.set_pickable(playable)
+			p._apply_visual()
 
-func _on_pearl_clicked(ri: int, slot_index: int) -> void:
-	if not player_turn or game_over:
-		return
-	if slot_index >= rows[ri]:
-		return
-	if selected_row != -1 and selected_row != ri:
-		selected_row = -1
-		selected_indices.clear()
-	selected_row = ri
-	if slot_index in selected_indices:
-		selected_indices.erase(slot_index)
-	else:
-		selected_indices.append(slot_index)
-	if selected_indices.is_empty():
-		_clear_selection()
-		return
-	confirm_btn.visible = true
-	_set_status("Remove %d from row %s? Click confirm." % [selected_indices.size(), char(65 + ri)])
-	_refresh_pearls()
+func _selected_row() -> int:
+	for ri in pearls.size():
+		var count: int = rows[ri] if ri < rows.size() else 0
+		for i in mini(count, pearls[ri].size()):
+			var p: Pearl = pearls[ri][i]
+			if p.selected and p.phase == Pearl.Phase.IDLE:
+				return ri
+	return -1
+
+func _selected_count() -> int:
+	var n := 0
+	for ri in pearls.size():
+		var count: int = rows[ri] if ri < rows.size() else 0
+		for i in mini(count, pearls[ri].size()):
+			var p: Pearl = pearls[ri][i]
+			if p.selected and p.phase == Pearl.Phase.IDLE:
+				n += 1
+	return n
 
 func _clear_selection() -> void:
-	selected_row = -1
-	selected_indices.clear()
-	confirm_btn.visible = false
-	_set_status("Your turn — click pearls to select, then confirm.")
+	for row_arr in pearls:
+		for p in row_arr:
+			var pearl: Pearl = p
+			pearl.selected = false
+	last_select_row = -1
+	last_select_index = -1
 	_refresh_pearls()
+	_refresh_take_button()
+	if player_turn and not game_over and not busy:
+		_set_status(_setup_status() if _is_setup() else _your_turn_status())
 
-func _input(event: InputEvent) -> void:
-	if event.is_action_pressed("ui_cancel") and selected_row != -1 and player_turn and not game_over:
+func _refresh_take_button() -> void:
+	if take_btn == null:
+		return
+	var n := _selected_count()
+	var can := n > 0 and game_started and player_turn and not game_over and not busy
+	take_btn.disabled = not can
+	take_btn.text = "Take selected" if n == 0 else ("Take %d" % n)
+	_style_button(take_btn, can)
+
+func _on_board_clicked() -> void:
+	if player_turn and not busy and not game_over and _selected_count() > 0:
+		_play_click()
 		_clear_selection()
 
-func _on_confirm() -> void:
-	if selected_row == -1 or selected_indices.is_empty():
+func _on_pearl_clicked(p: Pearl) -> void:
+	if not game_started or not player_turn or game_over or busy:
 		return
-	rows[selected_row] -= selected_indices.size()
-	selected_row = -1
-	selected_indices.clear()
-	confirm_btn.visible = false
+	if p.phase != Pearl.Phase.IDLE:
+		return
+	var ri: int = p.row
+	var idx: int = pearls[ri].find(p)
+	if idx < 0 or idx >= rows[ri]:
+		return
+	var current_row := _selected_row()
+	if current_row >= 0 and current_row != ri:
+		for row_arr in pearls:
+			for q in row_arr:
+				var other: Pearl = q
+				other.selected = false
+		last_select_row = -1
+		last_select_index = -1
+	var shift := Input.is_key_pressed(KEY_SHIFT)
+	if shift and last_select_row == ri and last_select_index >= 0:
+		var a: int = mini(last_select_index, idx)
+		var b: int = maxi(last_select_index, idx)
+		for i in range(a, b + 1):
+			if i < rows[ri]:
+				var q: Pearl = pearls[ri][i]
+				q.selected = true
+	else:
+		p.selected = not p.selected
+		if p.selected:
+			p.animate_select_pulse()
+	last_select_row = ri
+	last_select_index = idx
+	_play_click()
+	_refresh_pearls()
+	_refresh_take_button()
+	var n := _selected_count()
+	if n == 0:
+		_set_status(_setup_status() if _is_setup() else _your_turn_status())
+	else:
+		_set_status("Row %s - %d selected. Take, or pick more." % [char(65 + ri), n])
+
+func _try_take_selected() -> void:
+	if not game_started or not player_turn or game_over or busy:
+		return
+	var ri := _selected_row()
+	if ri < 0:
+		return
+	var indices: Array = []
+	for i in range(rows[ri]):
+		var p: Pearl = pearls[ri][i]
+		if p.selected:
+			indices.append(i)
+	if indices.is_empty():
+		return
+	await _take_indices(ri, indices, true)
+
+func _take(ri: int, n: int, is_player: bool) -> void:
+	var from_i: int = rows[ri] - n
+	var indices: Array = []
+	for i in range(from_i, rows[ri]):
+		indices.append(i)
+	await _take_indices(ri, indices, is_player)
+
+func _take_indices(ri: int, indices: Array, is_player: bool) -> void:
+	busy = true
+	for row_arr in pearls:
+		for q in row_arr:
+			var pearl: Pearl = q
+			pearl.selected = false
+	last_select_row = -1
+	last_select_index = -1
+	_refresh_take_button()
 	if not game_started:
 		game_started = true
+		rules_label.visible = false
+		_refresh_mode_buttons()
 		_refresh_diff_buttons()
+	indices.sort()
+	var n: int = indices.size()
+	_play_take()
+	var last_tw: Signal
+	var has_tw := false
+	for i in indices:
+		var p: Pearl = pearls[ri][i]
+		last_tw = p.animate_remove()
+		has_tw = true
+	if has_tw:
+		await last_tw
+	var alive: Array = []
+	var dead: Array = []
+	for p in pearls[ri]:
+		var pearl: Pearl = p
+		if pearl.phase == Pearl.Phase.REMOVING or pearl.phase == Pearl.Phase.REMOVED:
+			dead.append(pearl)
+		else:
+			alive.append(pearl)
+	pearls[ri] = alive + dead
+	if not alive.is_empty():
+		var tw := create_tween()
+		tw.set_parallel(true)
+		for i in alive.size():
+			var pearl: Pearl = alive[i]
+			tw.tween_property(pearl, "position", _pearl_pos(ri, i), 0.28).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		await tw.finished
+	rows[ri] = alive.size()
+	player_took_last = is_player
 	if _check_game_over():
+		busy = false
+		_refresh_take_button()
 		return
-	player_turn = false
-	_set_status("Computer is thinking…")
-	_refresh_pearls()
-	var gen := game_gen
-	await get_tree().create_timer(0.7).timeout
-	if game_gen == gen:
-		_ai_move()
+	if is_player:
+		player_turn = false
+		_set_status("Computer is thinking…")
+		_refresh_pearls()
+		_refresh_take_button()
+		var gen := game_gen
+		await get_tree().create_timer(0.55).timeout
+		if game_gen == gen:
+			await _ai_move()
+		else:
+			busy = false
+	else:
+		player_turn = true
+		busy = false
+		_set_status("Computer took %d from row %s. Your turn." % [n, char(65 + ri)])
+		_refresh_pearls()
+		_refresh_take_button()
 
 func _check_game_over() -> bool:
 	var total := 0
 	for r in rows:
 		total += r
-	if total == 0:
-		game_over = true
-		var msg := ""
-		if player_turn:
-			msg = "You took the last pearl. Computer wins!"
-		else:
-			msg = "Computer took the last pearl. You win!"
-		_set_status(msg)
-		_refresh_pearls()
-		return true
-	return false
+	if total != 0:
+		return false
+	game_over = true
+	busy = false
+	_refresh_pearls()
+	_refresh_mode_buttons()
+	_refresh_diff_buttons()
+	_refresh_take_button()
+	var player_won: bool
+	if play_mode == PlayMode.CLASSIC:
+		player_won = player_took_last
+	else:
+		player_won = not player_took_last
+	status_label.visible = false
+	result_dim.visible = true
+	result_box.visible = true
+	if player_won:
+		result_title.text = "You win"
+		result_sub.text = "You took the last pearl." if play_mode == PlayMode.CLASSIC else "The computer took the last pearl."
+	else:
+		result_title.text = "Computer wins"
+		result_sub.text = "The computer took the last pearl." if play_mode == PlayMode.CLASSIC else "You took the last pearl."
+	return true
+
+func _set_play_mode(m: int) -> void:
+	if _options_locked():
+		_refresh_mode_buttons()
+		return
+	if play_mode == m:
+		_refresh_mode_buttons()
+		_refresh_copy()
+		return
+	play_mode = m
+	_play_click()
+	_refresh_mode_buttons()
+	_refresh_copy()
 
 func _set_difficulty(d: int) -> void:
+	if _options_locked():
+		_refresh_diff_buttons()
+		return
+	if difficulty == d:
+		_refresh_diff_buttons()
+		return
 	difficulty = d
+	_play_click()
 	_refresh_diff_buttons()
 
+func _refresh_mode_buttons() -> void:
+	var locked := _options_locked()
+	for i in mode_btns.size():
+		var btn: Button = mode_btns[i]
+		btn.disabled = locked
+		btn.set_pressed_no_signal(i == play_mode)
+		_style_button(btn, i == play_mode)
+
 func _refresh_diff_buttons() -> void:
+	var locked := _options_locked()
 	for i in diff_btns.size():
 		var btn: Button = diff_btns[i]
+		btn.disabled = locked
 		btn.set_pressed_no_signal(i == difficulty)
-		btn.disabled = game_started and not game_over
-		if i == difficulty:
-			var col: Color = DIFF_COLORS[i]
-			btn.add_theme_color_override("font_color", col)
-			btn.add_theme_color_override("font_pressed_color", col)
-			btn.add_theme_color_override("font_hover_color", col)
-		else:
-			btn.remove_theme_color_override("font_color")
-			btn.remove_theme_color_override("font_pressed_color")
-			btn.remove_theme_color_override("font_hover_color")
+		_style_button(btn, i == difficulty)
+		if i != difficulty and not locked:
+			btn.add_theme_color_override("font_color", DIFF_COLORS[i])
+			btn.add_theme_color_override("font_hover_color", DIFF_COLORS[i].lightened(0.15))
+
+func _play_click() -> void:
+	if sfx_click.stream:
+		sfx_click.pitch_scale = randf_range(0.96, 1.05)
+		sfx_click.play()
+
+func _play_take() -> void:
+	if sfx_take.stream:
+		sfx_take.pitch_scale = randf_range(0.94, 1.06)
+		sfx_take.play()
 
 func _random_move() -> void:
 	var available: Array = []
@@ -296,76 +879,63 @@ func _random_move() -> void:
 			available.append(i)
 	var move_row: int = available[randi() % available.size()]
 	var move_count: int = 1 + randi() % rows[move_row]
-	rows[move_row] -= move_count
-	if _check_game_over():
-		return
-	player_turn = true
-	_set_status("Computer removed %d from row %s. Your turn!" % [move_count, char(65 + move_row)])
-	_refresh_pearls()
+	await _take(move_row, move_count, false)
 
-# Misère Nim AI
-# big>=2: play normal Nim (XOR to 0)
-# big==1: reduce that heap to 0 or 1 so opponent faces odd count of 1-heaps
-# big==0: take a 1 (only 1s left)
 func _ai_move() -> void:
 	if randf() > OPTIMAL_CHANCE[difficulty]:
-		_random_move()
+		await _random_move()
 		return
-
-	var big := 0
-	var ones := 0
-	for r in rows:
-		if r > 1:
-			big += 1
-		elif r == 1:
-			ones += 1
-
 	var move_row := -1
 	var move_count := 0
-
-	if big >= 2:
-		var ns := 0
+	if play_mode == PlayMode.CLASSIC:
+		var pick: Array = _normal_nim_move()
+		move_row = pick[0]
+		move_count = pick[1]
+	else:
+		var big := 0
+		var ones := 0
 		for r in rows:
-			ns ^= r
-		if ns == 0:
-			move_row = _largest_row()
-			move_count = 1
+			if r > 1:
+				big += 1
+			elif r == 1:
+				ones += 1
+		if big >= 2:
+			var pick2: Array = _normal_nim_move()
+			move_row = pick2[0]
+			move_count = pick2[1]
+		elif big == 1:
+			var bi := -1
+			for i in rows.size():
+				if rows[i] > 1:
+					bi = i
+					break
+			move_row = bi
+			if (ones + 1) % 2 == 1:
+				move_count = rows[bi] - 1
+			else:
+				move_count = rows[bi]
 		else:
 			for i in rows.size():
-				var target: int = rows[i] ^ ns
-				if target < rows[i]:
+				if rows[i] == 1:
 					move_row = i
-					move_count = rows[i] - target
+					move_count = 1
 					break
-	elif big == 1:
-		var bi := -1
-		for i in rows.size():
-			if rows[i] > 1:
-				bi = i
-				break
-		if (ones + 1) % 2 == 1:
-			move_row = bi
-			move_count = rows[bi] - 1
-		else:
-			move_row = bi
-			move_count = rows[bi]
-	else:
-		for i in rows.size():
-			if rows[i] == 1:
-				move_row = i
-				move_count = 1
-				break
-
 	if move_row == -1 or move_count <= 0:
 		move_row = _largest_row()
 		move_count = 1
+	await _take(move_row, move_count, false)
 
-	rows[move_row] -= move_count
-	if _check_game_over():
-		return
-	player_turn = true
-	_set_status("Computer removed %d from row %s. Your turn!" % [move_count, char(65 + move_row)])
-	_refresh_pearls()
+func _normal_nim_move() -> Array:
+	var ns := 0
+	for r in rows:
+		ns ^= r
+	if ns == 0:
+		return [_largest_row(), 1]
+	for i in rows.size():
+		var target: int = rows[i] ^ ns
+		if target < rows[i]:
+			return [i, rows[i] - target]
+	return [_largest_row(), 1]
 
 func _largest_row() -> int:
 	var idx := 0
