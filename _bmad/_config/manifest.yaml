@@ -1,0 +1,22 @@
+installation:
+  version: 6.11.1-next.28
+  installDate: 2026-08-28T03:48:05.525Z
+  lastUpdated: 2026-08-28T03:48:05.525Z
+  installShims: false
+modules:
+  - name: core
+    version: 6.11.1-next.28
+    installDate: 2026-08-28T03:48:05.463Z
+    lastUpdated: 2026-08-28T03:48:05.525Z
+    source: built-in
+    npmPackage: null
+    repoUrl: null
+  - name: bmm
+    version: 6.11.1-next.28
+    installDate: 2026-08-28T03:48:05.508Z
+    lastUpdated: 2026-08-28T03:48:05.525Z
+    source: built-in
+    npmPackage: null
+    repoUrl: null
+ides:
+  - grok
