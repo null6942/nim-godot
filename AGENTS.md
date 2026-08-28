@@ -1,5 +1,5 @@
 <!-- bmad:context -->
-<!-- Verified 2026-08-28 against 1008882 plus the cache-bust deploy. Managed by bmad-project-context; edits inside this block are replaced on refresh. Keep anything you want preserved outside the markers. -->
+<!-- Verified 2026-08-28 against 8b6b525 after history rewrite (old 2D wasm/pck blobs stripped). Managed by bmad-project-context; edits inside this block are replaced on refresh. Keep anything you want preserved outside the markers. -->
 
 ## Nim
 
