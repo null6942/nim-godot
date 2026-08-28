@@ -13,3 +13,6 @@ builds/web/nim*.wasm
 # OS files
 .DS_Store
 Thumbs.db
+
+# Local BMad user config
+_bmad/config.user.toml
