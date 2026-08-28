@@ -45,11 +45,13 @@ var table_wrap: Control
 var status_label: Label
 var subtitle: Label
 var rules_label: Label
+var result_card: PanelContainer
 var result_box: VBoxContainer
 var result_title: Label
 var result_sub: Label
 var result_dim: ColorRect
 var take_btn: Button
+var new_btn: Button
 var mode_btns: Array = []
 var diff_btns: Array = []
 var pearls: Array = []
@@ -76,9 +78,17 @@ func _input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 
 func _load_fonts() -> void:
-	font_title = _font("res://fonts/Cinzel-SemiBold.ttf")
-	font_ui = _font("res://fonts/Outfit-Regular.ttf")
-	font_ui_bold = _font("res://fonts/Outfit-SemiBold.ttf")
+	font_title = _font("res://fonts/Fraunces-SemiBold.ttf")
+	font_ui = _font("res://fonts/Figtree-Regular.ttf")
+	font_ui_bold = _font("res://fonts/Figtree-SemiBold.ttf")
+
+func _tracked_font(font: Font, spacing: int) -> Font:
+	if font == null:
+		return null
+	var fv := FontVariation.new()
+	fv.base_font = font
+	fv.spacing_glyph = spacing
+	return fv
 
 func _font(path: String) -> Font:
 	if ResourceLoader.exists(path):
@@ -121,24 +131,64 @@ func _box(bg: Color, border: Color, width: int, radius: int, pad: int) -> StyleB
 	s.content_margin_bottom = pad * 0.55
 	return s
 
-func _style_button(btn: Button, selected: bool) -> void:
-	var normal := _box(BTN_BG, Color(0.33, 0.20, 0.10, 1), 1, 8, 14)
-	var hover := _box(BTN_HOVER, GOLD_DIM, 1, 8, 14)
-	var pressed := _box(GOLD, GOLD, 1, 8, 14)
-	var disabled := _box(Color(0.08, 0.09, 0.08, 0.85), Color(0.2, 0.18, 0.14, 1), 1, 8, 14)
-	btn.add_theme_stylebox_override("normal", pressed if selected else normal)
-	btn.add_theme_stylebox_override("hover", pressed if selected else hover)
+func _glow(s: StyleBoxFlat) -> StyleBoxFlat:
+	s.shadow_color = Color(GOLD.r, GOLD.g, GOLD.b, 0.28)
+	s.shadow_size = 5
+	s.shadow_offset = Vector2(0, 1)
+	return s
+
+func _style_button(btn: Button, selected: bool, locked := false) -> void:
+	var radius := 8
+	var pad := 14
+	var muted_box := _box(BTN_BG.darkened(0.2), Color(0.22, 0.20, 0.16, 1), 1, radius, pad)
+	var normal: StyleBoxFlat
+	var hover: StyleBoxFlat
+	var pressed: StyleBoxFlat
+	var disabled: StyleBoxFlat
+	if locked:
+		var fill := BTN_BG.darkened(0.12)
+		fill.a = 0.82
+		var border := Color(0.22, 0.20, 0.16, 1)
+		if selected:
+			fill = BTN_BG.lightened(0.06)
+			fill.a = 0.88
+			border = Color(GOLD_DIM.r, GOLD_DIM.g, GOLD_DIM.b, 0.45)
+		var box := _box(fill, border, 1, radius, pad)
+		normal = box
+		hover = box
+		pressed = box
+		disabled = box
+		btn.add_theme_color_override("font_color", FAINT)
+		btn.add_theme_color_override("font_hover_color", FAINT)
+		btn.add_theme_color_override("font_pressed_color", FAINT)
+		btn.add_theme_color_override("font_disabled_color", FAINT)
+	elif selected:
+		pressed = _glow(_box(GOLD, GOLD, 1, radius, pad))
+		normal = pressed
+		hover = _glow(_box(GOLD.lightened(0.08), GOLD, 1, radius, pad))
+		disabled = muted_box
+		btn.add_theme_color_override("font_color", INK)
+		btn.add_theme_color_override("font_hover_color", INK)
+		btn.add_theme_color_override("font_pressed_color", INK)
+		btn.add_theme_color_override("font_disabled_color", FAINT)
+	else:
+		normal = _box(BTN_BG, Color(0.33, 0.20, 0.10, 1), 1, radius, pad)
+		hover = _box(BTN_HOVER, GOLD_DIM, 1, radius, pad)
+		pressed = _box(GOLD, GOLD, 1, radius, pad)
+		disabled = muted_box
+		btn.add_theme_color_override("font_color", MUTED)
+		btn.add_theme_color_override("font_hover_color", GOLD)
+		btn.add_theme_color_override("font_pressed_color", INK)
+		btn.add_theme_color_override("font_disabled_color", FAINT)
+	btn.add_theme_stylebox_override("normal", normal)
+	btn.add_theme_stylebox_override("hover", hover)
 	btn.add_theme_stylebox_override("pressed", pressed)
-	btn.add_theme_stylebox_override("focus", pressed if selected else hover)
+	btn.add_theme_stylebox_override("focus", hover)
 	btn.add_theme_stylebox_override("disabled", disabled)
-	btn.add_theme_color_override("font_color", INK if selected else MUTED)
-	btn.add_theme_color_override("font_hover_color", INK if selected else GOLD)
-	btn.add_theme_color_override("font_pressed_color", INK)
-	btn.add_theme_color_override("font_disabled_color", FAINT)
 	if font_ui_bold:
 		btn.add_theme_font_override("font", font_ui_bold)
 	btn.add_theme_font_size_override("font_size", 15)
-	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	btn.mouse_default_cursor_shape = Control.CURSOR_ARROW if locked or btn.disabled else Control.CURSOR_POINTING_HAND
 	btn.focus_mode = Control.FOCUS_NONE
 
 func _mk_btn(text: String, toggle: bool) -> Button:
@@ -199,28 +249,28 @@ func _build_world() -> void:
 	env.background_mode = Environment.BG_COLOR
 	env.background_color = ROOM
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.28, 0.22, 0.16)
-	env.ambient_light_energy = 0.32
+	env.ambient_light_color = Color(0.26, 0.20, 0.14)
+	env.ambient_light_energy = 0.24
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.tonemap_exposure = 1.05
+	env.tonemap_exposure = 1.02
 	env.glow_enabled = true
-	env.glow_intensity = 0.45
-	env.glow_bloom = 0.04
-	env.glow_hdr_threshold = 0.85
+	env.glow_intensity = 0.52
+	env.glow_bloom = 0.05
+	env.glow_hdr_threshold = 0.80
 	env.adjustment_enabled = true
-	env.adjustment_saturation = 1.08
-	env.adjustment_contrast = 1.04
+	env.adjustment_saturation = 1.10
+	env.adjustment_contrast = 1.06
 	env.fog_enabled = true
-	env.fog_light_color = Color(0.04, 0.035, 0.03)
-	env.fog_density = 0.012
+	env.fog_light_color = Color(0.035, 0.032, 0.03)
+	env.fog_density = 0.016
 	var we := WorldEnvironment.new()
 	we.environment = env
 	world.add_child(we)
 
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-52, 28, 0)
-	sun.light_energy = 0.55
-	sun.light_color = Color(1.0, 0.95, 0.86)
+	sun.light_energy = 0.46
+	sun.light_color = Color(1.0, 0.94, 0.84)
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 22.0
 	world.add_child(sun)
@@ -228,25 +278,25 @@ func _build_world() -> void:
 	var lamp := SpotLight3D.new()
 	lamp.position = Vector3(0.0, 5.6, 0.15)
 	lamp.rotation_degrees = Vector3(-90, 0, 0)
-	lamp.light_energy = 2.4
-	lamp.light_color = Color(1.0, 0.90, 0.72)
+	lamp.light_energy = 2.7
+	lamp.light_color = Color(1.0, 0.88, 0.68)
 	lamp.spot_range = 12.0
-	lamp.spot_angle = 36.0
-	lamp.spot_attenuation = 0.6
+	lamp.spot_angle = 34.0
+	lamp.spot_attenuation = 0.55
 	lamp.shadow_enabled = true
 	world.add_child(lamp)
 
 	var fill := OmniLight3D.new()
 	fill.position = Vector3(-2.8, 3.4, 2.6)
-	fill.light_energy = 0.42
-	fill.light_color = Color(0.55, 0.68, 1.0)
+	fill.light_energy = 0.32
+	fill.light_color = Color(0.50, 0.64, 1.0)
 	fill.omni_range = 12.0
 	world.add_child(fill)
 
 	var rim_l := OmniLight3D.new()
 	rim_l.position = Vector3(2.4, 2.2, -2.2)
-	rim_l.light_energy = 0.38
-	rim_l.light_color = Color(1.0, 0.72, 0.38)
+	rim_l.light_energy = 0.44
+	rim_l.light_color = Color(1.0, 0.70, 0.36)
 	rim_l.omni_range = 9.0
 	world.add_child(rim_l)
 
@@ -264,16 +314,16 @@ func _build_world() -> void:
 	world.add_child(cam)
 
 func _build_table() -> void:
-	var walnut := _tex_mat("res://textures/walnut.png", Color(0.92, 0.86, 0.78), 0.48, 0.04, Vector3(0.42, 0.42, 0.42), true)
-	var felt := _tex_mat("res://textures/felt.png", Color(0.95, 1.0, 0.95), 0.92, 0.0, Vector3(1, 1, 1), false)
-	var floor_m := _tex_mat("res://textures/floor.png", Color(0.55, 0.48, 0.42), 0.72, 0.02, Vector3(0.14, 0.14, 0.14), true)
+	var walnut := _tex_mat("res://textures/walnut.png", Color(1.0, 0.96, 0.90), 0.40, 0.06, Vector3(0.92, 0.92, 0.92), true)
+	var felt := _tex_mat("res://textures/felt.png", Color(1.0, 1.0, 1.0), 0.95, 0.0, Vector3(2.4, 2.4, 2.4), false)
+	var floor_m := _tex_mat("res://textures/floor.png", Color(0.82, 0.80, 0.78), 0.84, 0.03, Vector3(0.20, 0.20, 0.20), true)
 	var gold := StandardMaterial3D.new()
-	gold.albedo_color = Color(0.78, 0.58, 0.22)
-	gold.metallic = 0.88
-	gold.roughness = 0.26
+	gold.albedo_color = GOLD
+	gold.metallic = 0.90
+	gold.roughness = 0.22
 	gold.emission_enabled = true
-	gold.emission = Color(0.55, 0.38, 0.10)
-	gold.emission_energy_multiplier = 0.18
+	gold.emission = GOLD_DIM
+	gold.emission_energy_multiplier = 0.22
 
 	var floor_mi := _mesh_box(Vector3(22.0, 0.08, 18.0), floor_m)
 	floor_mi.position = Vector3(0, -0.72, 0)
@@ -373,13 +423,22 @@ func _build_ui() -> void:
 	title.text = "NIM"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_apply_font(title, font_title, 48, GOLD, true)
+	_apply_font(title, _tracked_font(font_title, 8), 52, GOLD, true)
 	top.add_child(title)
+
+	var rule_wrap := CenterContainer.new()
+	rule_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var rule := ColorRect.new()
+	rule.custom_minimum_size = Vector2(64, 1)
+	rule.color = Color(GOLD.r, GOLD.g, GOLD.b, 0.85)
+	rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	rule_wrap.add_child(rule)
+	top.add_child(rule_wrap)
 
 	subtitle = Label.new()
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	subtitle.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_apply_font(subtitle, font_ui, 15, MUTED)
+	_apply_font(subtitle, font_ui, 14, MUTED)
 	top.add_child(subtitle)
 
 	var mode_row := HBoxContainer.new()
@@ -430,25 +489,29 @@ func _build_ui() -> void:
 	svc.add_child(table_viewport)
 
 	result_dim = ColorRect.new()
-	result_dim.color = Color(0, 0, 0, 0.5)
+	result_dim.color = Color(0, 0, 0, 0.38)
 	result_dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	result_dim.visible = false
 	result_dim.mouse_filter = Control.MOUSE_FILTER_STOP
 	table_wrap.add_child(result_dim)
 
+	result_card = PanelContainer.new()
+	result_card.set_anchors_preset(Control.PRESET_CENTER)
+	result_card.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	result_card.grow_vertical = Control.GROW_DIRECTION_BOTH
+	result_card.visible = false
+	result_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	result_card.custom_minimum_size = Vector2(400, 0)
+	var card_style := _box(Color(INK, 0.94), GOLD, 1, 10, 28)
+	card_style.content_margin_top = 22
+	card_style.content_margin_bottom = 22
+	result_card.add_theme_stylebox_override("panel", card_style)
+	table_wrap.add_child(result_card)
 	result_box = VBoxContainer.new()
-	result_box.set_anchors_preset(Control.PRESET_CENTER)
-	result_box.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	result_box.grow_vertical = Control.GROW_DIRECTION_BOTH
-	result_box.offset_left = -220
-	result_box.offset_right = 220
-	result_box.offset_top = -70
-	result_box.offset_bottom = 70
 	result_box.alignment = BoxContainer.ALIGNMENT_CENTER
-	result_box.add_theme_constant_override("separation", 6)
-	result_box.visible = false
+	result_box.add_theme_constant_override("separation", 8)
 	result_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	table_wrap.add_child(result_box)
+	result_card.add_child(result_box)
 	result_title = Label.new()
 	result_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	result_title.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -472,7 +535,7 @@ func _build_ui() -> void:
 	status_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	status_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_apply_font(status_label, font_ui, 17, GOLD)
+	_apply_font(status_label, font_ui, 14, FAINT)
 	bottom.add_child(status_label)
 
 	rules_label = Label.new()
@@ -488,7 +551,7 @@ func _build_ui() -> void:
 	take_btn.custom_minimum_size = Vector2(168, 40)
 	take_btn.pressed.connect(_try_take_selected)
 	new_row.add_child(take_btn)
-	var new_btn := _mk_btn("New game", false)
+	new_btn = _mk_btn("New game", false)
 	new_btn.custom_minimum_size = Vector2(150, 40)
 	_style_button(new_btn, true)
 	new_btn.pressed.connect(_on_new_game)
@@ -529,7 +592,7 @@ func _reset_board_state() -> void:
 	player_took_last = false
 	last_select_row = -1
 	last_select_index = -1
-	result_box.visible = false
+	result_card.visible = false
 	result_dim.visible = false
 	status_label.visible = true
 	rules_label.visible = false
@@ -579,9 +642,11 @@ func _build_board() -> void:
 	for ri in START.size():
 		var tag := Label3D.new()
 		tag.text = char(65 + ri)
+		if font_title:
+			tag.font = font_title
 		tag.font_size = 42
 		tag.pixel_size = 0.0045
-		tag.modulate = Color(0.90, 0.78, 0.42)
+		tag.modulate = GOLD
 		tag.outline_modulate = Color(0, 0, 0, 0.55)
 		tag.outline_size = 8
 		tag.position = Vector3(label_x, FELT_TOP + 0.10, ROW_Z[ri])
@@ -810,7 +875,7 @@ func _check_game_over() -> bool:
 		player_won = not player_took_last
 	status_label.visible = false
 	result_dim.visible = true
-	result_box.visible = true
+	result_card.visible = true
 	if player_won:
 		result_title.text = "You win"
 		result_sub.text = "You took the last pearl." if play_mode == PlayMode.CLASSIC else "The computer took the last pearl."
@@ -849,7 +914,7 @@ func _refresh_mode_buttons() -> void:
 		var btn: Button = mode_btns[i]
 		btn.disabled = locked
 		btn.set_pressed_no_signal(i == play_mode)
-		_style_button(btn, i == play_mode)
+		_style_button(btn, i == play_mode, locked)
 
 func _refresh_diff_buttons() -> void:
 	var locked := _options_locked()
@@ -857,7 +922,7 @@ func _refresh_diff_buttons() -> void:
 		var btn: Button = diff_btns[i]
 		btn.disabled = locked
 		btn.set_pressed_no_signal(i == difficulty)
-		_style_button(btn, i == difficulty)
+		_style_button(btn, i == difficulty, locked)
 		if i != difficulty and not locked:
 			btn.add_theme_color_override("font_color", DIFF_COLORS[i])
 			btn.add_theme_color_override("font_hover_color", DIFF_COLORS[i].lightened(0.15))

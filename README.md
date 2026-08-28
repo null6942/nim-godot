@@ -28,4 +28,4 @@ Requires [Godot 4.4+](https://godotengine.org/) with export templates installed.
 
 Export presets are included for macOS (universal), Windows (x86_64), Linux (x86_64), and Web (WASM).
 
-Fonts: [Cinzel](https://fonts.google.com/specimen/Cinzel) and [Outfit](https://fonts.google.com/specimen/Outfit), SIL Open Font License.
+Fonts: [Fraunces](https://fonts.google.com/specimen/Fraunces) and [Figtree](https://fonts.google.com/specimen/Figtree), SIL Open Font License.

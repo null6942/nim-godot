@@ -9,6 +9,7 @@ builds/web/nim*.pck
 builds/web/nim*.wasm
 *.uid
 *.import
+*.translation
 
 # OS files
 .DS_Store

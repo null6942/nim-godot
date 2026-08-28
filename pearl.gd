@@ -7,6 +7,7 @@ signal hover_changed(on: bool)
 enum Phase { IDLE, REMOVING, REMOVED }
 
 const RADIUS := 0.18
+const GOLD := Color("e8c056")
 
 var row := 0
 var selected := false:
@@ -48,17 +49,18 @@ func _ready() -> void:
 		mesh_instance.material_override = _mat
 	else:
 		_fallback_mat = StandardMaterial3D.new()
-		_fallback_mat.roughness = 0.10
-		_fallback_mat.metallic = 0.28
+		_fallback_mat.roughness = 0.08
+		_fallback_mat.metallic = 0.30
+		_fallback_mat.albedo_color = Color(0.94, 0.90, 0.84, 1.0)
 		mesh_instance.material_override = _fallback_mat
 
 	_ring_mat = StandardMaterial3D.new()
 	_ring_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_ring_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	_ring_mat.albedo_color = Color(0.93, 0.76, 0.32, 0.0)
+	_ring_mat.albedo_color = Color(GOLD, 0.0)
 	_ring_mat.emission_enabled = true
-	_ring_mat.emission = Color(0.93, 0.76, 0.32)
-	_ring_mat.emission_energy_multiplier = 1.4
+	_ring_mat.emission = GOLD
+	_ring_mat.emission_energy_multiplier = 1.35
 	_ring_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	var torus := TorusMesh.new()
 	torus.inner_radius = RADIUS * 1.18
@@ -137,25 +139,26 @@ func _apply_visual() -> void:
 		_mat.set_shader_parameter("hue_shift", hue_shift)
 	elif _fallback_mat:
 		if selected:
-			_fallback_mat.albedo_color = Color(0.95, 0.82, 0.42, 1.0)
+			_fallback_mat.albedo_color = GOLD
 			_fallback_mat.emission_enabled = true
-			_fallback_mat.emission = Color(0.85, 0.65, 0.15)
-			_fallback_mat.emission_energy_multiplier = 0.55
+			_fallback_mat.emission = GOLD
+			_fallback_mat.emission_energy_multiplier = 0.48
 		elif dimmed:
-			_fallback_mat.albedo_color = Color(0.72, 0.70, 0.66, 1.0)
+			_fallback_mat.albedo_color = Color(0.70, 0.68, 0.64, 1.0)
 			_fallback_mat.emission_enabled = false
 		else:
-			_fallback_mat.albedo_color = Color(0.93, 0.90, 0.85, 1.0)
+			_fallback_mat.albedo_color = Color(0.94, 0.90, 0.84, 1.0)
 			_fallback_mat.emission_enabled = hovered
 			if hovered:
-				_fallback_mat.emission = Color(0.85, 0.70, 0.30)
-				_fallback_mat.emission_energy_multiplier = 0.22
+				_fallback_mat.emission = GOLD
+				_fallback_mat.emission_energy_multiplier = 0.20
 	if ring and _ring_mat:
 		var show_ring := selected or hovered
 		ring.visible = show_ring
-		var alpha := 0.92 if selected else 0.42
-		_ring_mat.albedo_color = Color(0.93, 0.76, 0.32, alpha)
-		_ring_mat.emission_energy_multiplier = 2.1 if selected else 0.7
+		var alpha := 0.92 if selected else 0.40
+		_ring_mat.albedo_color = Color(GOLD, alpha)
+		_ring_mat.emission = GOLD
+		_ring_mat.emission_energy_multiplier = 1.85 if selected else 0.65
 		ring.scale = Vector3(1.08, 1.0, 1.08) if selected else Vector3.ONE
 
 func animate_select_pulse() -> void:
