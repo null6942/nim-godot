@@ -249,28 +249,28 @@ func _build_world() -> void:
 	env.background_mode = Environment.BG_COLOR
 	env.background_color = ROOM
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.26, 0.20, 0.14)
-	env.ambient_light_energy = 0.24
+	env.ambient_light_color = Color(0.28, 0.22, 0.16)
+	env.ambient_light_energy = 0.32
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.tonemap_exposure = 1.02
+	env.tonemap_exposure = 1.05
 	env.glow_enabled = true
-	env.glow_intensity = 0.52
-	env.glow_bloom = 0.05
-	env.glow_hdr_threshold = 0.80
+	env.glow_intensity = 0.45
+	env.glow_bloom = 0.04
+	env.glow_hdr_threshold = 0.85
 	env.adjustment_enabled = true
-	env.adjustment_saturation = 1.10
-	env.adjustment_contrast = 1.06
+	env.adjustment_saturation = 1.08
+	env.adjustment_contrast = 1.04
 	env.fog_enabled = true
-	env.fog_light_color = Color(0.035, 0.032, 0.03)
-	env.fog_density = 0.016
+	env.fog_light_color = Color(0.04, 0.035, 0.03)
+	env.fog_density = 0.012
 	var we := WorldEnvironment.new()
 	we.environment = env
 	world.add_child(we)
 
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-52, 28, 0)
-	sun.light_energy = 0.46
-	sun.light_color = Color(1.0, 0.94, 0.84)
+	sun.light_energy = 0.55
+	sun.light_color = Color(1.0, 0.95, 0.86)
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 22.0
 	world.add_child(sun)
@@ -278,25 +278,25 @@ func _build_world() -> void:
 	var lamp := SpotLight3D.new()
 	lamp.position = Vector3(0.0, 5.6, 0.15)
 	lamp.rotation_degrees = Vector3(-90, 0, 0)
-	lamp.light_energy = 2.7
-	lamp.light_color = Color(1.0, 0.88, 0.68)
+	lamp.light_energy = 2.4
+	lamp.light_color = Color(1.0, 0.90, 0.72)
 	lamp.spot_range = 12.0
-	lamp.spot_angle = 34.0
-	lamp.spot_attenuation = 0.55
+	lamp.spot_angle = 36.0
+	lamp.spot_attenuation = 0.6
 	lamp.shadow_enabled = true
 	world.add_child(lamp)
 
 	var fill := OmniLight3D.new()
 	fill.position = Vector3(-2.8, 3.4, 2.6)
-	fill.light_energy = 0.32
-	fill.light_color = Color(0.50, 0.64, 1.0)
+	fill.light_energy = 0.42
+	fill.light_color = Color(0.55, 0.68, 1.0)
 	fill.omni_range = 12.0
 	world.add_child(fill)
 
 	var rim_l := OmniLight3D.new()
 	rim_l.position = Vector3(2.4, 2.2, -2.2)
-	rim_l.light_energy = 0.44
-	rim_l.light_color = Color(1.0, 0.70, 0.36)
+	rim_l.light_energy = 0.38
+	rim_l.light_color = Color(1.0, 0.72, 0.38)
 	rim_l.omni_range = 9.0
 	world.add_child(rim_l)
 
@@ -314,9 +314,9 @@ func _build_world() -> void:
 	world.add_child(cam)
 
 func _build_table() -> void:
-	var walnut := _tex_mat("res://textures/walnut.png", Color(1.0, 0.96, 0.90), 0.40, 0.06, Vector3(0.92, 0.92, 0.92), true)
-	var felt := _tex_mat("res://textures/felt.png", Color(1.0, 1.0, 1.0), 0.95, 0.0, Vector3(2.4, 2.4, 2.4), false)
-	var floor_m := _tex_mat("res://textures/floor.png", Color(0.82, 0.80, 0.78), 0.84, 0.03, Vector3(0.20, 0.20, 0.20), true)
+	var walnut := _tex_mat("res://textures/walnut.png", Color(0.92, 0.86, 0.78), 0.48, 0.04, Vector3(0.42, 0.42, 0.42), true)
+	var felt := _tex_mat("res://textures/felt.png", Color(0.95, 1.0, 0.95), 0.92, 0.0, Vector3(1, 1, 1), false)
+	var floor_m := _tex_mat("res://textures/floor.png", Color(0.55, 0.48, 0.42), 0.72, 0.02, Vector3(0.14, 0.14, 0.14), true)
 	var gold := StandardMaterial3D.new()
 	gold.albedo_color = GOLD
 	gold.metallic = 0.90

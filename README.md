@@ -2,6 +2,8 @@
 
 3D Nim in Godot 4. Four heaps of pearls in the Marienbad layout (1, 3, 5, 7). Click pearls in a single row to select them, then **Take**. Shift+click selects a range; Esc or a click on the table clears the selection.
 
+Play it at **[nim.yermom.dev](https://nim.yermom.dev)**. That host is the Jupiter nginx copy of `builds/web/`; pushing this repo does not publish the game.
+
 ![Gameplay screenshot](screenshot.png)
 
 ## Rules
@@ -26,6 +28,14 @@ Hard Classic is perfect XOR play. Hard Misère uses the standard misère correct
 
 Requires [Godot 4.4+](https://godotengine.org/) with export templates installed.
 
-Export presets are included for macOS (universal), Windows (x86_64), Linux (x86_64), and Web (WASM).
+Export presets are included for macOS (universal), Windows (x86_64), Linux (x86_64), and Web (WASM). Web must export to `builds/web/index.html` so the loader stays on the `index` executable.
+
+To ship a new web build to the live site (after the Godot export):
+
+```
+scripts/deploy-web.sh
+```
+
+That rsyncs `builds/web/` onto Jupiter `/home/aaron/docker/nim/html/`. Browsers cache Godot `index.pck` even when nginx sends `no-store`; `cachebust.js` and a versioned `nim3d.pck` exist so a stale 2D pack cannot come back.
 
 Fonts: [Fraunces](https://fonts.google.com/specimen/Fraunces) and [Figtree](https://fonts.google.com/specimen/Figtree), SIL Open Font License.
