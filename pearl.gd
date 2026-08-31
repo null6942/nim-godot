@@ -51,7 +51,7 @@ func _ready() -> void:
 		_fallback_mat = StandardMaterial3D.new()
 		_fallback_mat.roughness = 0.08
 		_fallback_mat.metallic = 0.30
-		_fallback_mat.albedo_color = Color(0.94, 0.90, 0.84, 1.0)
+		_fallback_mat.albedo_color = Color(0.96, 0.92, 0.86, 1.0)
 		mesh_instance.material_override = _fallback_mat
 
 	_ring_mat = StandardMaterial3D.new()
@@ -60,7 +60,7 @@ func _ready() -> void:
 	_ring_mat.albedo_color = Color(GOLD, 0.0)
 	_ring_mat.emission_enabled = true
 	_ring_mat.emission = GOLD
-	_ring_mat.emission_energy_multiplier = 1.35
+	_ring_mat.emission_energy_multiplier = 1.55
 	_ring_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	var torus := TorusMesh.new()
 	torus.inner_radius = RADIUS * 1.18
@@ -77,7 +77,7 @@ func _ready() -> void:
 	var blob_mat := StandardMaterial3D.new()
 	blob_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	blob_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	blob_mat.albedo_color = Color(0.02, 0.03, 0.02, 0.38)
+	blob_mat.albedo_color = Color(0.04, 0.03, 0.02, 0.44)
 	blob_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	var blob_mesh := CylinderMesh.new()
 	blob_mesh.top_radius = RADIUS * 0.92
@@ -147,7 +147,7 @@ func _apply_visual() -> void:
 			_fallback_mat.albedo_color = Color(0.70, 0.68, 0.64, 1.0)
 			_fallback_mat.emission_enabled = false
 		else:
-			_fallback_mat.albedo_color = Color(0.94, 0.90, 0.84, 1.0)
+			_fallback_mat.albedo_color = Color(0.96, 0.92, 0.86, 1.0)
 			_fallback_mat.emission_enabled = hovered
 			if hovered:
 				_fallback_mat.emission = GOLD
@@ -155,10 +155,10 @@ func _apply_visual() -> void:
 	if ring and _ring_mat:
 		var show_ring := selected or hovered
 		ring.visible = show_ring
-		var alpha := 0.92 if selected else 0.40
+		var alpha := 0.96 if selected else 0.46
 		_ring_mat.albedo_color = Color(GOLD, alpha)
 		_ring_mat.emission = GOLD
-		_ring_mat.emission_energy_multiplier = 1.85 if selected else 0.65
+		_ring_mat.emission_energy_multiplier = 2.05 if selected else 0.75
 		ring.scale = Vector3(1.08, 1.0, 1.08) if selected else Vector3.ONE
 
 func animate_select_pulse() -> void:

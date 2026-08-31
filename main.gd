@@ -137,6 +137,13 @@ func _glow(s: StyleBoxFlat) -> StyleBoxFlat:
 	s.shadow_offset = Vector2(0, 1)
 	return s
 
+func _plaque(pad: int) -> StyleBoxFlat:
+	var s := _box(Color(INK.r, INK.g, INK.b, 0.78), Color(GOLD.r, GOLD.g, GOLD.b, 0.40), 1, 12, pad)
+	s.shadow_color = Color(0, 0, 0, 0.32)
+	s.shadow_size = 8
+	s.shadow_offset = Vector2(0, 2)
+	return s
+
 func _style_button(btn: Button, selected: bool, locked := false) -> void:
 	var radius := 8
 	var pad := 14
@@ -278,8 +285,8 @@ func _build_world() -> void:
 	var lamp := SpotLight3D.new()
 	lamp.position = Vector3(0.0, 5.6, 0.15)
 	lamp.rotation_degrees = Vector3(-90, 0, 0)
-	lamp.light_energy = 2.4
-	lamp.light_color = Color(1.0, 0.90, 0.72)
+	lamp.light_energy = 2.55
+	lamp.light_color = Color(1.0, 0.91, 0.74)
 	lamp.spot_range = 12.0
 	lamp.spot_angle = 36.0
 	lamp.spot_attenuation = 0.6
@@ -314,16 +321,16 @@ func _build_world() -> void:
 	world.add_child(cam)
 
 func _build_table() -> void:
-	var walnut := _tex_mat("res://textures/walnut.png", Color(0.92, 0.86, 0.78), 0.48, 0.04, Vector3(0.42, 0.42, 0.42), true)
-	var felt := _tex_mat("res://textures/felt.png", Color(0.95, 1.0, 0.95), 0.92, 0.0, Vector3(1, 1, 1), false)
-	var floor_m := _tex_mat("res://textures/floor.png", Color(0.55, 0.48, 0.42), 0.72, 0.02, Vector3(0.14, 0.14, 0.14), true)
+	var walnut := _tex_mat("res://textures/walnut.png", Color(0.98, 0.93, 0.86), 0.40, 0.05, Vector3(0.36, 0.36, 0.36), true)
+	var felt := _tex_mat("res://textures/felt.png", Color(0.98, 1.0, 0.98), 0.90, 0.0, Vector3(1, 1, 1), false)
+	var floor_m := _tex_mat("res://textures/floor.png", Color(0.90, 0.86, 0.80), 0.64, 0.03, Vector3(0.16, 0.16, 0.16), true)
 	var gold := StandardMaterial3D.new()
 	gold.albedo_color = GOLD
 	gold.metallic = 0.90
-	gold.roughness = 0.22
+	gold.roughness = 0.20
 	gold.emission_enabled = true
 	gold.emission = GOLD_DIM
-	gold.emission_energy_multiplier = 0.22
+	gold.emission_energy_multiplier = 0.28
 
 	var floor_mi := _mesh_box(Vector3(22.0, 0.08, 18.0), floor_m)
 	floor_mi.position = Vector3(0, -0.72, 0)
@@ -407,30 +414,36 @@ func _build_ui() -> void:
 	col.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	col.offset_left = 16
 	col.offset_right = -16
-	col.offset_top = 10
-	col.offset_bottom = -12
-	col.add_theme_constant_override("separation", 8)
+	col.offset_top = 14
+	col.offset_bottom = -16
+	col.add_theme_constant_override("separation", 10)
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(col)
 
+	var top_plaque := PanelContainer.new()
+	top_plaque.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	top_plaque.mouse_filter = Control.MOUSE_FILTER_STOP
+	top_plaque.add_theme_stylebox_override("panel", _plaque(12))
+	col.add_child(top_plaque)
+
 	var top := VBoxContainer.new()
 	top.alignment = BoxContainer.ALIGNMENT_CENTER
-	top.add_theme_constant_override("separation", 6)
+	top.add_theme_constant_override("separation", 7)
 	top.mouse_filter = Control.MOUSE_FILTER_STOP
-	col.add_child(top)
+	top_plaque.add_child(top)
 
 	var title := Label.new()
 	title.text = "NIM"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_apply_font(title, _tracked_font(font_title, 8), 52, GOLD, true)
+	_apply_font(title, _tracked_font(font_title, 10), 52, GOLD, true)
 	top.add_child(title)
 
 	var rule_wrap := CenterContainer.new()
 	rule_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var rule := ColorRect.new()
-	rule.custom_minimum_size = Vector2(64, 1)
-	rule.color = Color(GOLD.r, GOLD.g, GOLD.b, 0.85)
+	rule.custom_minimum_size = Vector2(88, 2)
+	rule.color = Color(GOLD.r, GOLD.g, GOLD.b, 0.88)
 	rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	rule_wrap.add_child(rule)
 	top.add_child(rule_wrap)
@@ -489,7 +502,7 @@ func _build_ui() -> void:
 	svc.add_child(table_viewport)
 
 	result_dim = ColorRect.new()
-	result_dim.color = Color(0, 0, 0, 0.38)
+	result_dim.color = Color(ROOM.r, ROOM.g, ROOM.b, 0.55)
 	result_dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	result_dim.visible = false
 	result_dim.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -501,10 +514,12 @@ func _build_ui() -> void:
 	result_card.grow_vertical = Control.GROW_DIRECTION_BOTH
 	result_card.visible = false
 	result_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	result_card.custom_minimum_size = Vector2(400, 0)
-	var card_style := _box(Color(INK, 0.94), GOLD, 1, 10, 28)
-	card_style.content_margin_top = 22
-	card_style.content_margin_bottom = 22
+	result_card.custom_minimum_size = Vector2(280, 0)
+	var card_style := _box(Color(INK, 0.96), GOLD, 1, 12, 26)
+	card_style.content_margin_top = 24
+	card_style.content_margin_bottom = 24
+	card_style.shadow_color = Color(GOLD.r, GOLD.g, GOLD.b, 0.18)
+	card_style.shadow_size = 10
 	result_card.add_theme_stylebox_override("panel", card_style)
 	table_wrap.add_child(result_card)
 	result_box = VBoxContainer.new()
@@ -517,17 +532,31 @@ func _build_ui() -> void:
 	result_title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_apply_font(result_title, font_title, 40, GOLD, true)
 	result_box.add_child(result_title)
+	var result_rule_wrap := CenterContainer.new()
+	result_rule_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var result_rule := ColorRect.new()
+	result_rule.custom_minimum_size = Vector2(72, 1)
+	result_rule.color = Color(GOLD.r, GOLD.g, GOLD.b, 0.70)
+	result_rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	result_rule_wrap.add_child(result_rule)
+	result_box.add_child(result_rule_wrap)
 	result_sub = Label.new()
 	result_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	result_sub.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_apply_font(result_sub, font_ui, 16, MUTED)
 	result_box.add_child(result_sub)
 
+	var bottom_plaque := PanelContainer.new()
+	bottom_plaque.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bottom_plaque.mouse_filter = Control.MOUSE_FILTER_STOP
+	bottom_plaque.add_theme_stylebox_override("panel", _plaque(12))
+	col.add_child(bottom_plaque)
+
 	var bottom := VBoxContainer.new()
 	bottom.alignment = BoxContainer.ALIGNMENT_CENTER
 	bottom.add_theme_constant_override("separation", 6)
 	bottom.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	col.add_child(bottom)
+	bottom_plaque.add_child(bottom)
 
 	status_label = Label.new()
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -548,11 +577,11 @@ func _build_ui() -> void:
 	new_row.add_theme_constant_override("separation", 12)
 	bottom.add_child(new_row)
 	take_btn = _mk_btn("Take selected", false)
-	take_btn.custom_minimum_size = Vector2(168, 40)
+	take_btn.custom_minimum_size = Vector2(156, 40)
 	take_btn.pressed.connect(_try_take_selected)
 	new_row.add_child(take_btn)
 	new_btn = _mk_btn("New game", false)
-	new_btn.custom_minimum_size = Vector2(150, 40)
+	new_btn.custom_minimum_size = Vector2(158, 42)
 	_style_button(new_btn, true)
 	new_btn.pressed.connect(_on_new_game)
 	new_row.add_child(new_btn)
