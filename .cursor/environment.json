@@ -1,0 +1,5 @@
+{
+  "name": "Nim (Godot 4.4)",
+  "user": "ubuntu",
+  "install": "bash .cursor/install.sh"
+}
