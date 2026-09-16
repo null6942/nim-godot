@@ -1,6 +1,6 @@
 /* Force a fresh 3D pack. Old index.pck (78 KB 2D) was sticky in browser HTTP cache. */
 (function () {
-	var VERSION = '3d-20260916-3';
+	var VERSION = '3d-20260916-4';
 
 	function bump(u) {
 		if (typeof u !== 'string') {
