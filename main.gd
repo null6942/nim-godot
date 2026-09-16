@@ -102,13 +102,24 @@ func _tracked_font(font: Font, spacing: int) -> Font:
 	return fv
 
 func _font(path: String) -> Font:
+	if ResourceLoader.exists(path):
+		var res = load(path)
+		if res is Font:
+			_tune_font(res)
+			return res
 	var ff := FontFile.new()
-	if ff.load_dynamic_font(path) != OK:
-		return null
+	if ff.load_dynamic_font(path) == OK:
+		_tune_font(ff)
+		return ff
+	return null
+
+func _tune_font(font: Font) -> void:
+	if not (font is FontFile):
+		return
+	var ff: FontFile = font
 	ff.antialiasing = TextServer.FONT_ANTIALIASING_GRAY
 	ff.hinting = TextServer.HINTING_LIGHT
 	ff.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_DISABLED
-	return ff
 
 func _load_tex(path: String) -> Texture2D:
 	if ResourceLoader.exists(path):
