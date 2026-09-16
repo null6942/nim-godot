@@ -42,6 +42,7 @@ var last_select_index := -1
 var font_title: Font
 var font_ui: Font
 var font_ui_bold: Font
+var font_ui_caps: Font
 
 var world: Node3D
 var pearls_root: Node3D
@@ -63,7 +64,6 @@ var pearls: Array = []
 var sfx_click: AudioStreamPlayer
 var sfx_take: AudioStreamPlayer
 var _result_tween: Tween
-var _status_tween: Tween
 
 func _ready() -> void:
 	_load_fonts()
@@ -85,16 +85,24 @@ func _input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 
 func _load_fonts() -> void:
-	font_title = _font("res://fonts/Fraunces-SemiBold.ttf")
-	font_ui = _font("res://fonts/Figtree-Regular.ttf")
-	font_ui_bold = _font("res://fonts/Figtree-SemiBold.ttf")
+	var title_raw := _font("res://fonts/Fraunces-SemiBold.ttf")
+	var ui_raw := _font("res://fonts/Figtree-Regular.ttf")
+	var bold_raw := _font("res://fonts/Figtree-SemiBold.ttf")
+	# Figtree is compact; open tracking plus a slight X-scale so body/buttons are not condensed.
+	font_title = _tracked_font(title_raw, 12)
+	font_ui = _tracked_font(ui_raw, 4, 1.10)
+	font_ui_bold = _tracked_font(bold_raw, 4, 1.10)
+	font_ui_caps = _tracked_font(ui_raw, 6, 1.10)
 
-func _tracked_font(font: Font, spacing: int) -> Font:
+func _tracked_font(font: Font, spacing: int, widen := 1.0) -> Font:
 	if font == null:
 		return null
 	var fv := FontVariation.new()
 	fv.base_font = font
-	fv.spacing_glyph = spacing
+	fv.set_spacing(TextServer.SPACING_GLYPH, spacing)
+	if not is_equal_approx(widen, 1.0):
+		# Transform widens glyphs but not advances; spacing above covers the extra width.
+		fv.variation_transform = Transform2D(0.0, Vector2(widen, 1.0), 0.0, Vector2.ZERO)
 	return fv
 
 func _font(path: String) -> Font:
@@ -117,14 +125,18 @@ func _load_tex(path: String) -> Texture2D:
 		return ImageTexture.create_from_image(img)
 	return null
 
-func _apply_font(ctrl: Control, font: Font, size: int, color: Color, outline := false) -> void:
+func _apply_font(ctrl: Control, font: Font, size: int, color: Color) -> void:
 	if font:
 		ctrl.add_theme_font_override("font", font)
 	ctrl.add_theme_font_size_override("font_size", size)
 	ctrl.add_theme_color_override("font_color", color)
-	if outline:
-		ctrl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.4))
-		ctrl.add_theme_constant_override("outline_size", 3)
+	# Solid fill only: outlines/shadows ghost on gold-on-dark HUD type.
+	ctrl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0))
+	ctrl.add_theme_constant_override("outline_size", 0)
+	ctrl.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0))
+	ctrl.add_theme_constant_override("shadow_offset_x", 0)
+	ctrl.add_theme_constant_override("shadow_offset_y", 0)
+	ctrl.add_theme_constant_override("shadow_outline_size", 0)
 
 func _box(bg: Color, border: Color, width: int, radius: int, pad: int) -> StyleBoxFlat:
 	var s := StyleBoxFlat.new()
@@ -137,12 +149,6 @@ func _box(bg: Color, border: Color, width: int, radius: int, pad: int) -> StyleB
 	s.content_margin_right = pad
 	s.content_margin_top = pad * 0.55
 	s.content_margin_bottom = pad * 0.55
-	return s
-
-func _glow(s: StyleBoxFlat) -> StyleBoxFlat:
-	s.shadow_color = Color(GOLD.r, GOLD.g, GOLD.b, 0.28)
-	s.shadow_size = 5
-	s.shadow_offset = Vector2(0, 1)
 	return s
 
 func _plaque(pad: int) -> StyleBoxFlat:
@@ -167,7 +173,7 @@ func _section_label(text: String) -> Label:
 	lab.text = text
 	lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_apply_font(lab, _tracked_font(font_ui_bold if font_ui_bold else font_ui, 4), 13, MUTED)
+	_apply_font(lab, font_ui_caps if font_ui_caps else font_ui, 13, MUTED)
 	return lab
 
 func _style_button(btn: Button, selected: bool, locked := false) -> void:
@@ -197,9 +203,9 @@ func _style_button(btn: Button, selected: bool, locked := false) -> void:
 		btn.add_theme_color_override("font_pressed_color", locked_ink)
 		btn.add_theme_color_override("font_disabled_color", locked_ink)
 	elif selected:
-		pressed = _glow(_box(GOLD, GOLD, CHROME_BORDER, radius, pad))
+		pressed = _box(GOLD, GOLD, CHROME_BORDER, radius, pad)
 		normal = pressed
-		hover = _glow(_box(GOLD.lightened(0.07), GOLD, CHROME_BORDER, radius, pad))
+		hover = _box(GOLD.lightened(0.07), GOLD, CHROME_BORDER, radius, pad)
 		disabled = muted_box
 		btn.add_theme_color_override("font_color", INK)
 		btn.add_theme_color_override("font_hover_color", INK)
@@ -222,6 +228,9 @@ func _style_button(btn: Button, selected: bool, locked := false) -> void:
 	if font_ui_bold:
 		btn.add_theme_font_override("font", font_ui_bold)
 	btn.add_theme_font_size_override("font_size", 16)
+	btn.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0))
+	btn.add_theme_constant_override("outline_size", 0)
+	btn.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0))
 	btn.mouse_default_cursor_shape = Control.CURSOR_ARROW if locked or btn.disabled else Control.CURSOR_POINTING_HAND
 	btn.focus_mode = Control.FOCUS_NONE
 
@@ -229,7 +238,7 @@ func _mk_btn(text: String, toggle: bool) -> Button:
 	var btn := Button.new()
 	btn.text = text
 	btn.toggle_mode = toggle
-	btn.custom_minimum_size = Vector2(100, 38)
+	btn.custom_minimum_size = Vector2(112, 38)
 	_style_button(btn, false)
 	return btn
 
@@ -463,7 +472,7 @@ func _build_ui() -> void:
 	title.text = "NIM"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_apply_font(title, _tracked_font(font_title, 12), 48, GOLD, true)
+	_apply_font(title, font_title, 48, GOLD)
 	top.add_child(title)
 
 	top.add_child(_hairline(72.0, 0.78))
@@ -471,7 +480,7 @@ func _build_ui() -> void:
 	subtitle = Label.new()
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	subtitle.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_apply_font(subtitle, font_ui_bold if font_ui_bold else font_ui, 16, MUTED)
+	_apply_font(subtitle, font_ui, 16, MUTED)
 	top.add_child(subtitle)
 
 	top.add_child(_section_label("MODE"))
@@ -482,7 +491,7 @@ func _build_ui() -> void:
 	top.add_child(mode_row)
 	for m in [PlayMode.CLASSIC, PlayMode.MISERE]:
 		var btn := _mk_btn(MODE_LABELS[m], false)
-		btn.custom_minimum_size = Vector2(118, 38)
+		btn.custom_minimum_size = Vector2(140, 38)
 		var captured: int = m
 		btn.pressed.connect(func(): _set_play_mode(captured))
 		mode_row.add_child(btn)
@@ -496,7 +505,7 @@ func _build_ui() -> void:
 	top.add_child(diff_row)
 	for d in [Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD]:
 		var btn := _mk_btn(DIFF_LABELS[d], false)
-		btn.custom_minimum_size = Vector2(102, 38)
+		btn.custom_minimum_size = Vector2(124, 38)
 		var captured_d: int = d
 		btn.pressed.connect(func(): _set_difficulty(captured_d))
 		diff_row.add_child(btn)
@@ -575,13 +584,13 @@ func _build_ui() -> void:
 	result_title = Label.new()
 	result_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	result_title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_apply_font(result_title, font_title, 38, GOLD, true)
+	_apply_font(result_title, font_title, 38, GOLD)
 	result_box.add_child(result_title)
 	result_box.add_child(_hairline(56.0, 0.72))
 	result_sub = Label.new()
 	result_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	result_sub.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_apply_font(result_sub, font_ui_bold if font_ui_bold else font_ui, 17, MUTED)
+	_apply_font(result_sub, font_ui, 17, MUTED)
 	result_box.add_child(result_sub)
 
 	var bottom_plaque := PanelContainer.new()
@@ -602,7 +611,7 @@ func _build_ui() -> void:
 	status_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	status_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_apply_font(status_label, font_ui_bold if font_ui_bold else font_ui, 16, MUTED)
+	_apply_font(status_label, font_ui, 16, MUTED)
 	bottom.add_child(status_label)
 
 	rules_label = Label.new()
@@ -620,7 +629,7 @@ func _build_ui() -> void:
 	take_btn.pressed.connect(_try_take_selected)
 	new_row.add_child(take_btn)
 	new_btn = _mk_btn("New game", false)
-	new_btn.custom_minimum_size = Vector2(156, 44)
+	new_btn.custom_minimum_size = Vector2(168, 44)
 	_style_button(new_btn, true)
 	new_btn.pressed.connect(_on_new_game)
 	new_row.add_child(new_btn)
@@ -1124,8 +1133,4 @@ func _set_status(msg: String) -> void:
 	if status_label == null:
 		return
 	status_label.text = msg
-	if _status_tween and _status_tween.is_valid():
-		_status_tween.kill()
-	status_label.modulate.a = 0.35
-	_status_tween = create_tween()
-	_status_tween.tween_property(status_label, "modulate:a", 1.0, 0.22).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	status_label.modulate.a = 1.0
