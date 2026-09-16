@@ -2,7 +2,7 @@
 title: 'Salon HUD and UX polish pass'
 type: 'feature'
 created: '2026-09-16'
-status: 'in-review'
+status: 'done'
 baseline_commit: '1b406c1'
 context:
   - '{project-root}/AGENTS.md'
