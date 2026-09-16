@@ -6,10 +6,11 @@ const ROW_Z := [-1.95, -0.65, 0.65, 1.95]
 const FELT_TOP := 0.06
 
 const GOLD := Color("e8c056")
-const GOLD_DIM := Color("c9a24a")
+const GOLD_DIM := Color("d4b056")
 const INK := Color("1a140c")
-const MUTED := Color(0.78, 0.74, 0.66, 1.0)
-const FAINT := Color(0.55, 0.52, 0.46, 1.0)
+const PAPER := Color("f3efe4")
+const MUTED := Color(0.90, 0.86, 0.78, 1.0)
+const FAINT := Color(0.70, 0.66, 0.58, 1.0)
 const ROOM := Color(0.035, 0.032, 0.03, 1.0)
 const BTN_BG := Color(0.10, 0.12, 0.11, 0.92)
 const BTN_HOVER := Color(0.16, 0.18, 0.16, 0.95)
@@ -42,7 +43,6 @@ var last_select_index := -1
 var font_title: Font
 var font_ui: Font
 var font_ui_bold: Font
-var font_ui_caps: Font
 
 var world: Node3D
 var pearls_root: Node3D
@@ -85,35 +85,30 @@ func _input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 
 func _load_fonts() -> void:
-	var title_raw := _font("res://fonts/Fraunces-SemiBold.ttf")
-	var ui_raw := _font("res://fonts/Figtree-Regular.ttf")
-	var bold_raw := _font("res://fonts/Figtree-SemiBold.ttf")
-	# Figtree is compact; open tracking plus a slight X-scale so body/buttons are not condensed.
-	font_title = _tracked_font(title_raw, 12)
-	font_ui = _tracked_font(ui_raw, 4, 1.10)
-	font_ui_bold = _tracked_font(bold_raw, 4, 1.10)
-	font_ui_caps = _tracked_font(ui_raw, 6, 1.10)
+	# Inter (SIL OFL). Fraunces/Figtree stayed fuzzy at HUD sizes in the web export.
+	# Bold wordmark, SemiBold buttons/labels, Medium body — no light/thin cuts.
+	font_title = _tracked_font(_font("res://fonts/Inter-Bold.ttf"), 1)
+	font_ui = _font("res://fonts/Inter-Medium.ttf")
+	font_ui_bold = _font("res://fonts/Inter-SemiBold.ttf")
 
-func _tracked_font(font: Font, spacing: int, widen := 1.0) -> Font:
+func _tracked_font(font: Font, spacing: int) -> Font:
 	if font == null:
 		return null
+	if spacing == 0:
+		return font
 	var fv := FontVariation.new()
 	fv.base_font = font
 	fv.set_spacing(TextServer.SPACING_GLYPH, spacing)
-	if not is_equal_approx(widen, 1.0):
-		# Transform widens glyphs but not advances; spacing above covers the extra width.
-		fv.variation_transform = Transform2D(0.0, Vector2(widen, 1.0), 0.0, Vector2.ZERO)
 	return fv
 
 func _font(path: String) -> Font:
-	if ResourceLoader.exists(path):
-		var res = load(path)
-		if res is Font:
-			return res
 	var ff := FontFile.new()
-	if ff.load_dynamic_font(path) == OK:
-		return ff
-	return null
+	if ff.load_dynamic_font(path) != OK:
+		return null
+	ff.antialiasing = TextServer.FONT_ANTIALIASING_GRAY
+	ff.hinting = TextServer.HINTING_LIGHT
+	ff.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_DISABLED
+	return ff
 
 func _load_tex(path: String) -> Texture2D:
 	if ResourceLoader.exists(path):
@@ -125,18 +120,20 @@ func _load_tex(path: String) -> Texture2D:
 		return ImageTexture.create_from_image(img)
 	return null
 
-func _apply_font(ctrl: Control, font: Font, size: int, color: Color) -> void:
-	if font:
-		ctrl.add_theme_font_override("font", font)
-	ctrl.add_theme_font_size_override("font_size", size)
-	ctrl.add_theme_color_override("font_color", color)
-	# Solid fill only: outlines/shadows ghost on gold-on-dark HUD type.
+func _kill_type_fx(ctrl: Control) -> void:
 	ctrl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0))
 	ctrl.add_theme_constant_override("outline_size", 0)
 	ctrl.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0))
 	ctrl.add_theme_constant_override("shadow_offset_x", 0)
 	ctrl.add_theme_constant_override("shadow_offset_y", 0)
 	ctrl.add_theme_constant_override("shadow_outline_size", 0)
+
+func _apply_font(ctrl: Control, font: Font, size: int, color: Color) -> void:
+	if font:
+		ctrl.add_theme_font_override("font", font)
+	ctrl.add_theme_font_size_override("font_size", size)
+	ctrl.add_theme_color_override("font_color", color)
+	_kill_type_fx(ctrl)
 
 func _box(bg: Color, border: Color, width: int, radius: int, pad: int) -> StyleBoxFlat:
 	var s := StyleBoxFlat.new()
@@ -149,14 +146,13 @@ func _box(bg: Color, border: Color, width: int, radius: int, pad: int) -> StyleB
 	s.content_margin_right = pad
 	s.content_margin_top = pad * 0.55
 	s.content_margin_bottom = pad * 0.55
+	s.shadow_color = Color(0, 0, 0, 0)
+	s.shadow_size = 0
+	s.shadow_offset = Vector2.ZERO
 	return s
 
 func _plaque(pad: int) -> StyleBoxFlat:
-	var s := _box(Color(INK.r, INK.g, INK.b, 0.72), Color(GOLD.r, GOLD.g, GOLD.b, 0.48), CHROME_BORDER, CHROME_RADIUS_PLAQUE, pad)
-	s.shadow_color = Color(0, 0, 0, 0.22)
-	s.shadow_size = 6
-	s.shadow_offset = Vector2(0, 2)
-	return s
+	return _box(Color(INK.r, INK.g, INK.b, 0.72), Color(GOLD.r, GOLD.g, GOLD.b, 0.48), CHROME_BORDER, CHROME_RADIUS_PLAQUE, pad)
 
 func _hairline(width: float = 64.0, alpha: float = 0.72) -> Control:
 	var wrap := CenterContainer.new()
@@ -173,7 +169,7 @@ func _section_label(text: String) -> Label:
 	lab.text = text
 	lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_apply_font(lab, font_ui_caps if font_ui_caps else font_ui, 13, MUTED)
+	_apply_font(lab, font_ui_bold if font_ui_bold else font_ui, 13, MUTED)
 	return lab
 
 func _style_button(btn: Button, selected: bool, locked := false) -> void:
@@ -184,6 +180,9 @@ func _style_button(btn: Button, selected: bool, locked := false) -> void:
 	var hover: StyleBoxFlat
 	var pressed: StyleBoxFlat
 	var disabled: StyleBoxFlat
+	var ink: Color
+	var hover_ink: Color
+	var pressed_ink: Color
 	if locked:
 		var fill := BTN_BG.darkened(0.14)
 		fill.a = 0.78
@@ -191,35 +190,31 @@ func _style_button(btn: Button, selected: bool, locked := false) -> void:
 		if selected:
 			fill = BTN_BG.lightened(0.04)
 			fill.a = 0.86
-			border = Color(GOLD_DIM.r, GOLD_DIM.g, GOLD_DIM.b, 0.55)
+			border = Color(GOLD.r, GOLD.g, GOLD.b, 0.70)
 		var box := _box(fill, border, CHROME_BORDER, radius, pad)
 		normal = box
 		hover = box
 		pressed = box
 		disabled = box
-		var locked_ink := GOLD_DIM if selected else MUTED
-		btn.add_theme_color_override("font_color", locked_ink)
-		btn.add_theme_color_override("font_hover_color", locked_ink)
-		btn.add_theme_color_override("font_pressed_color", locked_ink)
-		btn.add_theme_color_override("font_disabled_color", locked_ink)
+		ink = GOLD if selected else PAPER
+		hover_ink = ink
+		pressed_ink = ink
 	elif selected:
 		pressed = _box(GOLD, GOLD, CHROME_BORDER, radius, pad)
 		normal = pressed
-		hover = _box(GOLD.lightened(0.07), GOLD, CHROME_BORDER, radius, pad)
+		hover = _box(GOLD.lightened(0.06), GOLD, CHROME_BORDER, radius, pad)
 		disabled = muted_box
-		btn.add_theme_color_override("font_color", INK)
-		btn.add_theme_color_override("font_hover_color", INK)
-		btn.add_theme_color_override("font_pressed_color", INK)
-		btn.add_theme_color_override("font_disabled_color", MUTED)
+		ink = INK
+		hover_ink = INK
+		pressed_ink = INK
 	else:
-		normal = _box(BTN_BG, Color(0.30, 0.24, 0.16, 0.95), CHROME_BORDER, radius, pad)
-		hover = _box(BTN_HOVER, Color(GOLD_DIM.r, GOLD_DIM.g, GOLD_DIM.b, 0.85), CHROME_BORDER, radius, pad)
+		normal = _box(BTN_BG, Color(0.38, 0.32, 0.22, 0.95), CHROME_BORDER, radius, pad)
+		hover = _box(BTN_HOVER, Color(GOLD.r, GOLD.g, GOLD.b, 0.90), CHROME_BORDER, radius, pad)
 		pressed = _box(GOLD, GOLD, CHROME_BORDER, radius, pad)
 		disabled = muted_box
-		btn.add_theme_color_override("font_color", MUTED)
-		btn.add_theme_color_override("font_hover_color", GOLD)
-		btn.add_theme_color_override("font_pressed_color", INK)
-		btn.add_theme_color_override("font_disabled_color", MUTED)
+		ink = PAPER
+		hover_ink = GOLD
+		pressed_ink = INK
 	btn.add_theme_stylebox_override("normal", normal)
 	btn.add_theme_stylebox_override("hover", hover)
 	btn.add_theme_stylebox_override("pressed", pressed)
@@ -228,9 +223,13 @@ func _style_button(btn: Button, selected: bool, locked := false) -> void:
 	if font_ui_bold:
 		btn.add_theme_font_override("font", font_ui_bold)
 	btn.add_theme_font_size_override("font_size", 16)
-	btn.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0))
-	btn.add_theme_constant_override("outline_size", 0)
-	btn.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0))
+	btn.add_theme_color_override("font_color", ink)
+	btn.add_theme_color_override("font_hover_color", hover_ink)
+	btn.add_theme_color_override("font_pressed_color", pressed_ink)
+	btn.add_theme_color_override("font_hover_pressed_color", pressed_ink)
+	btn.add_theme_color_override("font_focus_color", hover_ink)
+	btn.add_theme_color_override("font_disabled_color", ink if locked else MUTED)
+	_kill_type_fx(btn)
 	btn.mouse_default_cursor_shape = Control.CURSOR_ARROW if locked or btn.disabled else Control.CURSOR_POINTING_HAND
 	btn.focus_mode = Control.FOCUS_NONE
 
@@ -238,7 +237,7 @@ func _mk_btn(text: String, toggle: bool) -> Button:
 	var btn := Button.new()
 	btn.text = text
 	btn.toggle_mode = toggle
-	btn.custom_minimum_size = Vector2(112, 38)
+	btn.custom_minimum_size = Vector2(104, 38)
 	_style_button(btn, false)
 	return btn
 
@@ -480,7 +479,7 @@ func _build_ui() -> void:
 	subtitle = Label.new()
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	subtitle.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_apply_font(subtitle, font_ui, 16, MUTED)
+	_apply_font(subtitle, font_ui, 16, PAPER)
 	top.add_child(subtitle)
 
 	top.add_child(_section_label("MODE"))
@@ -491,7 +490,7 @@ func _build_ui() -> void:
 	top.add_child(mode_row)
 	for m in [PlayMode.CLASSIC, PlayMode.MISERE]:
 		var btn := _mk_btn(MODE_LABELS[m], false)
-		btn.custom_minimum_size = Vector2(140, 38)
+		btn.custom_minimum_size = Vector2(124, 38)
 		var captured: int = m
 		btn.pressed.connect(func(): _set_play_mode(captured))
 		mode_row.add_child(btn)
@@ -505,7 +504,7 @@ func _build_ui() -> void:
 	top.add_child(diff_row)
 	for d in [Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD]:
 		var btn := _mk_btn(DIFF_LABELS[d], false)
-		btn.custom_minimum_size = Vector2(124, 38)
+		btn.custom_minimum_size = Vector2(108, 38)
 		var captured_d: int = d
 		btn.pressed.connect(func(): _set_difficulty(captured_d))
 		diff_row.add_child(btn)
@@ -530,9 +529,9 @@ func _build_ui() -> void:
 	frame_style.content_margin_right = CHROME_BORDER_FRAME
 	frame_style.content_margin_top = CHROME_BORDER_FRAME
 	frame_style.content_margin_bottom = CHROME_BORDER_FRAME
-	frame_style.shadow_color = Color(0, 0, 0, 0.28)
-	frame_style.shadow_size = 10
-	frame_style.shadow_offset = Vector2(0, 3)
+	frame_style.shadow_color = Color(0, 0, 0, 0)
+	frame_style.shadow_size = 0
+	frame_style.shadow_offset = Vector2.ZERO
 	table_frame.add_theme_stylebox_override("panel", frame_style)
 	table_wrap.add_child(table_frame)
 
@@ -572,8 +571,6 @@ func _build_ui() -> void:
 	var card_style := _box(Color(INK.r, INK.g, INK.b, 0.94), Color(GOLD.r, GOLD.g, GOLD.b, 0.82), CHROME_BORDER_FRAME, CHROME_RADIUS_PLAQUE, 22)
 	card_style.content_margin_top = 22
 	card_style.content_margin_bottom = 22
-	card_style.shadow_color = Color(GOLD.r, GOLD.g, GOLD.b, 0.14)
-	card_style.shadow_size = 12
 	result_card.add_theme_stylebox_override("panel", card_style)
 	table_wrap.add_child(result_card)
 	result_box = VBoxContainer.new()
@@ -590,7 +587,7 @@ func _build_ui() -> void:
 	result_sub = Label.new()
 	result_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	result_sub.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_apply_font(result_sub, font_ui, 17, MUTED)
+	_apply_font(result_sub, font_ui, 17, PAPER)
 	result_box.add_child(result_sub)
 
 	var bottom_plaque := PanelContainer.new()
@@ -611,7 +608,7 @@ func _build_ui() -> void:
 	status_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	status_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_apply_font(status_label, font_ui, 16, MUTED)
+	_apply_font(status_label, font_ui_bold if font_ui_bold else font_ui, 16, PAPER)
 	bottom.add_child(status_label)
 
 	rules_label = Label.new()
@@ -629,7 +626,7 @@ func _build_ui() -> void:
 	take_btn.pressed.connect(_try_take_selected)
 	new_row.add_child(take_btn)
 	new_btn = _mk_btn("New game", false)
-	new_btn.custom_minimum_size = Vector2(168, 44)
+	new_btn.custom_minimum_size = Vector2(156, 44)
 	_style_button(new_btn, true)
 	new_btn.pressed.connect(_on_new_game)
 	new_row.add_child(new_btn)
@@ -1042,8 +1039,10 @@ func _refresh_diff_buttons() -> void:
 		btn.set_pressed_no_signal(i == difficulty)
 		_style_button(btn, i == difficulty, locked)
 		if i != difficulty and not locked:
-			btn.add_theme_color_override("font_color", DIFF_COLORS[i])
-			btn.add_theme_color_override("font_hover_color", DIFF_COLORS[i].lightened(0.15))
+			var accent: Color = DIFF_COLORS[i]
+			btn.add_theme_color_override("font_color", accent)
+			btn.add_theme_color_override("font_hover_color", accent.lightened(0.12))
+			btn.add_theme_color_override("font_focus_color", accent.lightened(0.12))
 
 func _play_click() -> void:
 	if sfx_click.stream:

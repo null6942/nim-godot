@@ -38,4 +38,4 @@ scripts/deploy-web.sh
 
 That rsyncs `builds/web/` onto Jupiter `/home/aaron/docker/nim/html/`. Browsers cache Godot `index.pck` even when nginx sends `no-store`; `cachebust.js` and a versioned `nim3d.pck` exist so a stale 2D pack cannot come back.
 
-Fonts: [Fraunces](https://fonts.google.com/specimen/Fraunces) and [Figtree](https://fonts.google.com/specimen/Figtree), SIL Open Font License.
+Fonts: [Inter](https://rsms.me/inter/) Bold, SemiBold, and Medium, SIL Open Font License.
