@@ -57,6 +57,8 @@ var diff_btns: Array = []
 var pearls: Array = []
 var sfx_click: AudioStreamPlayer
 var sfx_take: AudioStreamPlayer
+var _result_tween: Tween
+var _status_tween: Tween
 
 func _ready() -> void:
 	_load_fonts()
@@ -138,28 +140,46 @@ func _glow(s: StyleBoxFlat) -> StyleBoxFlat:
 	return s
 
 func _plaque(pad: int) -> StyleBoxFlat:
-	var s := _box(Color(INK.r, INK.g, INK.b, 0.78), Color(GOLD.r, GOLD.g, GOLD.b, 0.40), 1, 12, pad)
-	s.shadow_color = Color(0, 0, 0, 0.32)
-	s.shadow_size = 8
+	var s := _box(Color(INK.r, INK.g, INK.b, 0.72), Color(GOLD.r, GOLD.g, GOLD.b, 0.28), 1, 10, pad)
+	s.shadow_color = Color(0, 0, 0, 0.22)
+	s.shadow_size = 6
 	s.shadow_offset = Vector2(0, 2)
 	return s
 
+func _hairline(width: float = 64.0, alpha: float = 0.72) -> Control:
+	var wrap := CenterContainer.new()
+	wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var rule := ColorRect.new()
+	rule.custom_minimum_size = Vector2(width, 1)
+	rule.color = Color(GOLD.r, GOLD.g, GOLD.b, alpha)
+	rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	wrap.add_child(rule)
+	return wrap
+
+func _section_label(text: String) -> Label:
+	var lab := Label.new()
+	lab.text = text
+	lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_apply_font(lab, _tracked_font(font_ui_bold if font_ui_bold else font_ui, 4), 11, FAINT)
+	return lab
+
 func _style_button(btn: Button, selected: bool, locked := false) -> void:
-	var radius := 8
-	var pad := 14
-	var muted_box := _box(BTN_BG.darkened(0.2), Color(0.22, 0.20, 0.16, 1), 1, radius, pad)
+	var radius := 7
+	var pad := 12
+	var muted_box := _box(BTN_BG.darkened(0.22), Color(0.20, 0.18, 0.15, 1), 1, radius, pad)
 	var normal: StyleBoxFlat
 	var hover: StyleBoxFlat
 	var pressed: StyleBoxFlat
 	var disabled: StyleBoxFlat
 	if locked:
-		var fill := BTN_BG.darkened(0.12)
-		fill.a = 0.82
-		var border := Color(0.22, 0.20, 0.16, 1)
+		var fill := BTN_BG.darkened(0.14)
+		fill.a = 0.78
+		var border := Color(0.20, 0.18, 0.15, 1)
 		if selected:
-			fill = BTN_BG.lightened(0.06)
-			fill.a = 0.88
-			border = Color(GOLD_DIM.r, GOLD_DIM.g, GOLD_DIM.b, 0.45)
+			fill = BTN_BG.lightened(0.04)
+			fill.a = 0.86
+			border = Color(GOLD_DIM.r, GOLD_DIM.g, GOLD_DIM.b, 0.38)
 		var box := _box(fill, border, 1, radius, pad)
 		normal = box
 		hover = box
@@ -172,15 +192,15 @@ func _style_button(btn: Button, selected: bool, locked := false) -> void:
 	elif selected:
 		pressed = _glow(_box(GOLD, GOLD, 1, radius, pad))
 		normal = pressed
-		hover = _glow(_box(GOLD.lightened(0.08), GOLD, 1, radius, pad))
+		hover = _glow(_box(GOLD.lightened(0.07), GOLD, 1, radius, pad))
 		disabled = muted_box
 		btn.add_theme_color_override("font_color", INK)
 		btn.add_theme_color_override("font_hover_color", INK)
 		btn.add_theme_color_override("font_pressed_color", INK)
 		btn.add_theme_color_override("font_disabled_color", FAINT)
 	else:
-		normal = _box(BTN_BG, Color(0.33, 0.20, 0.10, 1), 1, radius, pad)
-		hover = _box(BTN_HOVER, GOLD_DIM, 1, radius, pad)
+		normal = _box(BTN_BG, Color(0.30, 0.24, 0.16, 0.95), 1, radius, pad)
+		hover = _box(BTN_HOVER, Color(GOLD_DIM.r, GOLD_DIM.g, GOLD_DIM.b, 0.85), 1, radius, pad)
 		pressed = _box(GOLD, GOLD, 1, radius, pad)
 		disabled = muted_box
 		btn.add_theme_color_override("font_color", MUTED)
@@ -194,7 +214,7 @@ func _style_button(btn: Button, selected: bool, locked := false) -> void:
 	btn.add_theme_stylebox_override("disabled", disabled)
 	if font_ui_bold:
 		btn.add_theme_font_override("font", font_ui_bold)
-	btn.add_theme_font_size_override("font_size", 15)
+	btn.add_theme_font_size_override("font_size", 14)
 	btn.mouse_default_cursor_shape = Control.CURSOR_ARROW if locked or btn.disabled else Control.CURSOR_POINTING_HAND
 	btn.focus_mode = Control.FOCUS_NONE
 
@@ -202,7 +222,7 @@ func _mk_btn(text: String, toggle: bool) -> Button:
 	var btn := Button.new()
 	btn.text = text
 	btn.toggle_mode = toggle
-	btn.custom_minimum_size = Vector2(100, 36)
+	btn.custom_minimum_size = Vector2(96, 34)
 	_style_button(btn, false)
 	return btn
 
@@ -412,23 +432,23 @@ func _build_ui() -> void:
 
 	var col := VBoxContainer.new()
 	col.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	col.offset_left = 16
-	col.offset_right = -16
-	col.offset_top = 14
-	col.offset_bottom = -16
-	col.add_theme_constant_override("separation", 10)
+	col.offset_left = 14
+	col.offset_right = -14
+	col.offset_top = 10
+	col.offset_bottom = -12
+	col.add_theme_constant_override("separation", 8)
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(col)
 
 	var top_plaque := PanelContainer.new()
 	top_plaque.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top_plaque.mouse_filter = Control.MOUSE_FILTER_STOP
-	top_plaque.add_theme_stylebox_override("panel", _plaque(12))
+	top_plaque.add_theme_stylebox_override("panel", _plaque(10))
 	col.add_child(top_plaque)
 
 	var top := VBoxContainer.new()
 	top.alignment = BoxContainer.ALIGNMENT_CENTER
-	top.add_theme_constant_override("separation", 7)
+	top.add_theme_constant_override("separation", 5)
 	top.mouse_filter = Control.MOUSE_FILTER_STOP
 	top_plaque.add_child(top)
 
@@ -436,24 +456,18 @@ func _build_ui() -> void:
 	title.text = "NIM"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_apply_font(title, _tracked_font(font_title, 10), 52, GOLD, true)
+	_apply_font(title, _tracked_font(font_title, 12), 46, GOLD, true)
 	top.add_child(title)
 
-	var rule_wrap := CenterContainer.new()
-	rule_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var rule := ColorRect.new()
-	rule.custom_minimum_size = Vector2(88, 2)
-	rule.color = Color(GOLD.r, GOLD.g, GOLD.b, 0.88)
-	rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	rule_wrap.add_child(rule)
-	top.add_child(rule_wrap)
+	top.add_child(_hairline(72.0, 0.78))
 
 	subtitle = Label.new()
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	subtitle.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_apply_font(subtitle, font_ui, 14, MUTED)
+	_apply_font(subtitle, font_ui, 13, MUTED)
 	top.add_child(subtitle)
 
+	top.add_child(_section_label("MODE"))
 	var mode_row := HBoxContainer.new()
 	mode_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	mode_row.add_theme_constant_override("separation", 8)
@@ -461,12 +475,13 @@ func _build_ui() -> void:
 	top.add_child(mode_row)
 	for m in [PlayMode.CLASSIC, PlayMode.MISERE]:
 		var btn := _mk_btn(MODE_LABELS[m], false)
-		btn.custom_minimum_size = Vector2(118, 34)
+		btn.custom_minimum_size = Vector2(112, 32)
 		var captured: int = m
 		btn.pressed.connect(func(): _set_play_mode(captured))
 		mode_row.add_child(btn)
 		mode_btns.append(btn)
 
+	top.add_child(_section_label("DIFFICULTY"))
 	var diff_row := HBoxContainer.new()
 	diff_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	diff_row.add_theme_constant_override("separation", 8)
@@ -474,6 +489,7 @@ func _build_ui() -> void:
 	top.add_child(diff_row)
 	for d in [Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD]:
 		var btn := _mk_btn(DIFF_LABELS[d], false)
+		btn.custom_minimum_size = Vector2(96, 32)
 		var captured_d: int = d
 		btn.pressed.connect(func(): _set_difficulty(captured_d))
 		diff_row.add_child(btn)
@@ -485,11 +501,30 @@ func _build_ui() -> void:
 	table_wrap.mouse_filter = Control.MOUSE_FILTER_STOP
 	col.add_child(table_wrap)
 
+	var table_frame := PanelContainer.new()
+	table_frame.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	table_frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var frame_style := StyleBoxFlat.new()
+	frame_style.bg_color = Color(0, 0, 0, 0)
+	frame_style.border_color = Color(GOLD.r, GOLD.g, GOLD.b, 0.34)
+	frame_style.set_border_width_all(1)
+	frame_style.set_corner_radius_all(8)
+	frame_style.content_margin_left = 1
+	frame_style.content_margin_right = 1
+	frame_style.content_margin_top = 1
+	frame_style.content_margin_bottom = 1
+	frame_style.shadow_color = Color(0, 0, 0, 0.28)
+	frame_style.shadow_size = 10
+	frame_style.shadow_offset = Vector2(0, 3)
+	table_frame.add_theme_stylebox_override("panel", frame_style)
+	table_wrap.add_child(table_frame)
+
 	var svc := SubViewportContainer.new()
-	svc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	svc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	svc.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	svc.stretch = true
 	svc.mouse_filter = Control.MOUSE_FILTER_STOP
-	table_wrap.add_child(svc)
+	table_frame.add_child(svc)
 
 	table_viewport = SubViewport.new()
 	table_viewport.transparent_bg = false
@@ -502,9 +537,10 @@ func _build_ui() -> void:
 	svc.add_child(table_viewport)
 
 	result_dim = ColorRect.new()
-	result_dim.color = Color(ROOM.r, ROOM.g, ROOM.b, 0.55)
+	result_dim.color = Color(ROOM.r, ROOM.g, ROOM.b, 0.48)
 	result_dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	result_dim.visible = false
+	result_dim.modulate.a = 0.0
 	result_dim.mouse_filter = Control.MOUSE_FILTER_STOP
 	table_wrap.add_child(result_dim)
 
@@ -513,48 +549,42 @@ func _build_ui() -> void:
 	result_card.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	result_card.grow_vertical = Control.GROW_DIRECTION_BOTH
 	result_card.visible = false
+	result_card.modulate.a = 0.0
 	result_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	result_card.custom_minimum_size = Vector2(280, 0)
-	var card_style := _box(Color(INK, 0.96), GOLD, 1, 12, 26)
-	card_style.content_margin_top = 24
-	card_style.content_margin_bottom = 24
-	card_style.shadow_color = Color(GOLD.r, GOLD.g, GOLD.b, 0.18)
-	card_style.shadow_size = 10
+	result_card.custom_minimum_size = Vector2(268, 0)
+	var card_style := _box(Color(INK.r, INK.g, INK.b, 0.94), Color(GOLD.r, GOLD.g, GOLD.b, 0.72), 1, 10, 22)
+	card_style.content_margin_top = 22
+	card_style.content_margin_bottom = 22
+	card_style.shadow_color = Color(GOLD.r, GOLD.g, GOLD.b, 0.14)
+	card_style.shadow_size = 12
 	result_card.add_theme_stylebox_override("panel", card_style)
 	table_wrap.add_child(result_card)
 	result_box = VBoxContainer.new()
 	result_box.alignment = BoxContainer.ALIGNMENT_CENTER
-	result_box.add_theme_constant_override("separation", 8)
+	result_box.add_theme_constant_override("separation", 7)
 	result_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	result_card.add_child(result_box)
 	result_title = Label.new()
 	result_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	result_title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_apply_font(result_title, font_title, 40, GOLD, true)
+	_apply_font(result_title, font_title, 36, GOLD, true)
 	result_box.add_child(result_title)
-	var result_rule_wrap := CenterContainer.new()
-	result_rule_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var result_rule := ColorRect.new()
-	result_rule.custom_minimum_size = Vector2(72, 1)
-	result_rule.color = Color(GOLD.r, GOLD.g, GOLD.b, 0.70)
-	result_rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	result_rule_wrap.add_child(result_rule)
-	result_box.add_child(result_rule_wrap)
+	result_box.add_child(_hairline(56.0, 0.62))
 	result_sub = Label.new()
 	result_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	result_sub.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_apply_font(result_sub, font_ui, 16, MUTED)
+	_apply_font(result_sub, font_ui, 15, MUTED)
 	result_box.add_child(result_sub)
 
 	var bottom_plaque := PanelContainer.new()
 	bottom_plaque.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bottom_plaque.mouse_filter = Control.MOUSE_FILTER_STOP
-	bottom_plaque.add_theme_stylebox_override("panel", _plaque(12))
+	bottom_plaque.add_theme_stylebox_override("panel", _plaque(10))
 	col.add_child(bottom_plaque)
 
 	var bottom := VBoxContainer.new()
 	bottom.alignment = BoxContainer.ALIGNMENT_CENTER
-	bottom.add_theme_constant_override("separation", 6)
+	bottom.add_theme_constant_override("separation", 8)
 	bottom.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bottom_plaque.add_child(bottom)
 
@@ -564,7 +594,7 @@ func _build_ui() -> void:
 	status_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	status_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_apply_font(status_label, font_ui, 14, FAINT)
+	_apply_font(status_label, font_ui, 13, MUTED)
 	bottom.add_child(status_label)
 
 	rules_label = Label.new()
@@ -574,14 +604,15 @@ func _build_ui() -> void:
 
 	var new_row := HBoxContainer.new()
 	new_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	new_row.add_theme_constant_override("separation", 12)
+	new_row.add_theme_constant_override("separation", 10)
 	bottom.add_child(new_row)
-	take_btn = _mk_btn("Take selected", false)
-	take_btn.custom_minimum_size = Vector2(156, 40)
+	take_btn = _mk_btn("Take", false)
+	take_btn.custom_minimum_size = Vector2(140, 38)
+	take_btn.visible = false
 	take_btn.pressed.connect(_try_take_selected)
 	new_row.add_child(take_btn)
 	new_btn = _mk_btn("New game", false)
-	new_btn.custom_minimum_size = Vector2(158, 42)
+	new_btn.custom_minimum_size = Vector2(148, 40)
 	_style_button(new_btn, true)
 	new_btn.pressed.connect(_on_new_game)
 	new_row.add_child(new_btn)
@@ -598,10 +629,10 @@ func _is_setup() -> bool:
 	return not game_started and not game_over
 
 func _setup_status() -> String:
-	return "Choose Classic or Misere and a difficulty, then press New game."
+	return "Choose a mode and difficulty, then begin."
 
 func _your_turn_status() -> String:
-	return "Your turn - select pearls in one row, then Take."
+	return "Your turn — select pearls in one row, then Take."
 
 func _refresh_copy() -> void:
 	if play_mode == PlayMode.CLASSIC:
@@ -621,8 +652,13 @@ func _reset_board_state() -> void:
 	player_took_last = false
 	last_select_row = -1
 	last_select_index = -1
+	if _result_tween and _result_tween.is_valid():
+		_result_tween.kill()
 	result_card.visible = false
+	result_card.modulate.a = 0.0
+	result_card.scale = Vector2.ONE
 	result_dim.visible = false
+	result_dim.modulate.a = 0.0
 	status_label.visible = true
 	rules_label.visible = false
 
@@ -745,13 +781,25 @@ func _clear_selection() -> void:
 		_set_status(_setup_status() if _is_setup() else _your_turn_status())
 
 func _refresh_take_button() -> void:
-	if take_btn == null:
+	if take_btn == null or new_btn == null:
 		return
+	var in_setup := _is_setup()
 	var n := _selected_count()
 	var can := n > 0 and game_started and player_turn and not game_over and not busy
+	take_btn.visible = not in_setup and not game_over
 	take_btn.disabled = not can
-	take_btn.text = "Take selected" if n == 0 else ("Take %d" % n)
-	_style_button(take_btn, can)
+	take_btn.text = "Take" if n == 0 else ("Take %d" % n)
+	# Setup / game-over: New game is primary. Match with selection: Take is primary.
+	if in_setup or game_over:
+		_style_button(new_btn, true)
+		if take_btn.visible:
+			_style_button(take_btn, false)
+	elif can:
+		_style_button(take_btn, true)
+		_style_button(new_btn, false)
+	else:
+		_style_button(take_btn, false)
+		_style_button(new_btn, false)
 
 func _on_board_clicked() -> void:
 	if player_turn and not busy and not game_over and _selected_count() > 0:
@@ -796,7 +844,7 @@ func _on_pearl_clicked(p: Pearl) -> void:
 	if n == 0:
 		_set_status(_setup_status() if _is_setup() else _your_turn_status())
 	else:
-		_set_status("Row %s - %d selected. Take, or pick more." % [char(65 + ri), n])
+		_set_status("Row %s — %d selected. Take, or pick more." % [char(65 + ri), n])
 
 func _try_take_selected() -> void:
 	if not game_started or not player_turn or game_over or busy:
@@ -903,15 +951,33 @@ func _check_game_over() -> bool:
 	else:
 		player_won = not player_took_last
 	status_label.visible = false
-	result_dim.visible = true
-	result_card.visible = true
 	if player_won:
 		result_title.text = "You win"
 		result_sub.text = "You took the last pearl." if play_mode == PlayMode.CLASSIC else "The computer took the last pearl."
 	else:
 		result_title.text = "Computer wins"
 		result_sub.text = "The computer took the last pearl." if play_mode == PlayMode.CLASSIC else "You took the last pearl."
+	_show_result_card()
 	return true
+
+func _show_result_card() -> void:
+	if _result_tween and _result_tween.is_valid():
+		_result_tween.kill()
+	result_dim.visible = true
+	result_dim.modulate.a = 0.0
+	result_card.visible = true
+	result_card.modulate.a = 0.0
+	result_card.scale = Vector2(0.96, 0.96)
+	result_card.pivot_offset = Vector2(result_card.custom_minimum_size.x * 0.5, 52.0)
+	_result_tween = create_tween()
+	_result_tween.set_parallel(true)
+	_result_tween.tween_property(result_dim, "modulate:a", 1.0, 0.28).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	_result_tween.tween_property(result_card, "modulate:a", 1.0, 0.32).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	_result_tween.tween_property(result_card, "scale", Vector2.ONE, 0.36).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_result_tween.chain().tween_callback(func():
+		if result_card:
+			result_card.pivot_offset = result_card.size * 0.5
+	)
 
 func _set_play_mode(m: int) -> void:
 	if _options_locked():
@@ -1041,4 +1107,11 @@ func _largest_row() -> int:
 	return idx
 
 func _set_status(msg: String) -> void:
+	if status_label == null:
+		return
 	status_label.text = msg
+	if _status_tween and _status_tween.is_valid():
+		_status_tween.kill()
+	status_label.modulate.a = 0.35
+	_status_tween = create_tween()
+	_status_tween.tween_property(status_label, "modulate:a", 1.0, 0.22).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
