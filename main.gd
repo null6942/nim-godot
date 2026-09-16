@@ -673,6 +673,9 @@ func _enter_setup() -> void:
 	_reset_board_state()
 	game_started = false
 	player_turn = false
+	# Empty seats until New game — setup is invitation, not a match.
+	for i in rows.size():
+		rows[i] = 0
 	_refresh_mode_buttons()
 	_refresh_diff_buttons()
 	_refresh_copy()
@@ -704,21 +707,24 @@ func _build_board() -> void:
 		c.queue_free()
 	pearls.clear()
 	var label_x: float = _row_origin_x() - 0.46
+	var show_labels := game_started
 	for ri in START.size():
-		var tag := Label3D.new()
-		tag.text = char(65 + ri)
-		if font_title:
-			tag.font = font_title
-		tag.font_size = 42
-		tag.pixel_size = 0.0045
-		tag.modulate = GOLD
-		tag.outline_modulate = Color(0, 0, 0, 0.55)
-		tag.outline_size = 8
-		tag.position = Vector3(label_x, FELT_TOP + 0.10, ROW_Z[ri])
-		tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-		pearls_root.add_child(tag)
+		if show_labels:
+			var tag := Label3D.new()
+			tag.text = char(65 + ri)
+			if font_title:
+				tag.font = font_title
+			tag.font_size = 42
+			tag.pixel_size = 0.0045
+			tag.modulate = GOLD
+			tag.outline_modulate = Color(0, 0, 0, 0.55)
+			tag.outline_size = 8
+			tag.position = Vector3(label_x, FELT_TOP + 0.10, ROW_Z[ri])
+			tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+			pearls_root.add_child(tag)
 		var row_pearls: Array = []
-		for i in START[ri]:
+		var seat_count: int = rows[ri] if ri < rows.size() else START[ri]
+		for i in seat_count:
 			var p := Pearl.new()
 			p.row = ri
 			p.hue_shift = randf_range(-0.045, 0.045)
