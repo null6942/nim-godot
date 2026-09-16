@@ -88,18 +88,21 @@ func _load_fonts() -> void:
 	var title_raw := _font("res://fonts/Fraunces-SemiBold.ttf")
 	var ui_raw := _font("res://fonts/Figtree-Regular.ttf")
 	var bold_raw := _font("res://fonts/Figtree-SemiBold.ttf")
-	# Positive glyph spacing is pixels; Figtree reads condensed without it.
+	# Figtree is compact; open tracking plus a slight X-scale so body/buttons are not condensed.
 	font_title = _tracked_font(title_raw, 12)
-	font_ui = _tracked_font(ui_raw, 2)
-	font_ui_bold = _tracked_font(bold_raw, 2)
-	font_ui_caps = _tracked_font(ui_raw, 6)
+	font_ui = _tracked_font(ui_raw, 4, 1.10)
+	font_ui_bold = _tracked_font(bold_raw, 4, 1.10)
+	font_ui_caps = _tracked_font(ui_raw, 6, 1.10)
 
-func _tracked_font(font: Font, spacing: int) -> Font:
+func _tracked_font(font: Font, spacing: int, widen := 1.0) -> Font:
 	if font == null:
 		return null
 	var fv := FontVariation.new()
 	fv.base_font = font
 	fv.set_spacing(TextServer.SPACING_GLYPH, spacing)
+	if not is_equal_approx(widen, 1.0):
+		# Transform widens glyphs but not advances; spacing above covers the extra width.
+		fv.variation_transform = Transform2D(0.0, Vector2(widen, 1.0), 0.0, Vector2.ZERO)
 	return fv
 
 func _font(path: String) -> Font:
@@ -235,7 +238,7 @@ func _mk_btn(text: String, toggle: bool) -> Button:
 	var btn := Button.new()
 	btn.text = text
 	btn.toggle_mode = toggle
-	btn.custom_minimum_size = Vector2(100, 38)
+	btn.custom_minimum_size = Vector2(112, 38)
 	_style_button(btn, false)
 	return btn
 
@@ -488,7 +491,7 @@ func _build_ui() -> void:
 	top.add_child(mode_row)
 	for m in [PlayMode.CLASSIC, PlayMode.MISERE]:
 		var btn := _mk_btn(MODE_LABELS[m], false)
-		btn.custom_minimum_size = Vector2(126, 38)
+		btn.custom_minimum_size = Vector2(140, 38)
 		var captured: int = m
 		btn.pressed.connect(func(): _set_play_mode(captured))
 		mode_row.add_child(btn)
@@ -502,7 +505,7 @@ func _build_ui() -> void:
 	top.add_child(diff_row)
 	for d in [Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD]:
 		var btn := _mk_btn(DIFF_LABELS[d], false)
-		btn.custom_minimum_size = Vector2(110, 38)
+		btn.custom_minimum_size = Vector2(124, 38)
 		var captured_d: int = d
 		btn.pressed.connect(func(): _set_difficulty(captured_d))
 		diff_row.add_child(btn)
@@ -626,7 +629,7 @@ func _build_ui() -> void:
 	take_btn.pressed.connect(_try_take_selected)
 	new_row.add_child(take_btn)
 	new_btn = _mk_btn("New game", false)
-	new_btn.custom_minimum_size = Vector2(156, 44)
+	new_btn.custom_minimum_size = Vector2(168, 44)
 	_style_button(new_btn, true)
 	new_btn.pressed.connect(_on_new_game)
 	new_row.add_child(new_btn)
