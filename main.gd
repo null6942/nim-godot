@@ -632,7 +632,7 @@ func _setup_status() -> String:
 	return "Choose a mode and difficulty, then begin."
 
 func _your_turn_status() -> String:
-	return "Your turn — select pearls in one row, then Take."
+	return "Your turn - select pearls in one row, then Take."
 
 func _refresh_copy() -> void:
 	if play_mode == PlayMode.CLASSIC:
@@ -850,7 +850,7 @@ func _on_pearl_clicked(p: Pearl) -> void:
 	if n == 0:
 		_set_status(_setup_status() if _is_setup() else _your_turn_status())
 	else:
-		_set_status("Row %s — %d selected. Take, or pick more." % [char(65 + ri), n])
+		_set_status("Row %s - %d selected. Take, or pick more." % [char(65 + ri), n])
 
 func _try_take_selected() -> void:
 	if not game_started or not player_turn or game_over or busy:
