@@ -48,6 +48,18 @@ var world: Node3D
 var pearls_root: Node3D
 var table_viewport: SubViewport
 var table_wrap: Control
+var hud_col: VBoxContainer
+var top_plaque: PanelContainer
+var top_box: VBoxContainer
+var title_label: Label
+var title_rule: Control
+var mode_section: Label
+var diff_section: Label
+var mode_row: HBoxContainer
+var diff_row: HBoxContainer
+var bottom_plaque: PanelContainer
+var bottom_box: VBoxContainer
+var action_row: HBoxContainer
 var status_label: Label
 var subtitle: Label
 var rules_label: Label
@@ -64,12 +76,18 @@ var pearls: Array = []
 var sfx_click: AudioStreamPlayer
 var sfx_take: AudioStreamPlayer
 var _result_tween: Tween
+var _hud_btn_font := 16
+var _hud_btn_pad := 12
+var _layout_key := ""
 
 func _ready() -> void:
 	_load_fonts()
 	_build_ui()
 	_build_world()
 	_enter_setup()
+	get_window().size_changed.connect(_on_window_size_changed)
+	_apply_responsive_hud()
+	call_deferred("_apply_responsive_hud")
 
 func _input(event: InputEvent) -> void:
 	if event.is_echo() or not (event is InputEventKey) or not event.pressed:
@@ -185,7 +203,7 @@ func _section_label(text: String) -> Label:
 
 func _style_button(btn: Button, selected: bool, locked := false) -> void:
 	var radius := CHROME_RADIUS_BTN
-	var pad := 12
+	var pad := _hud_btn_pad
 	var muted_box := _box(BTN_BG.darkened(0.22), Color(0.20, 0.18, 0.15, 1), CHROME_BORDER, radius, pad)
 	var normal: StyleBoxFlat
 	var hover: StyleBoxFlat
@@ -233,7 +251,7 @@ func _style_button(btn: Button, selected: bool, locked := false) -> void:
 	btn.add_theme_stylebox_override("disabled", disabled)
 	if font_ui_bold:
 		btn.add_theme_font_override("font", font_ui_bold)
-	btn.add_theme_font_size_override("font_size", 16)
+	btn.add_theme_font_size_override("font_size", _hud_btn_font)
 	btn.add_theme_color_override("font_color", ink)
 	btn.add_theme_color_override("font_hover_color", hover_ink)
 	btn.add_theme_color_override("font_pressed_color", pressed_ink)
@@ -249,6 +267,7 @@ func _mk_btn(text: String, toggle: bool) -> Button:
 	btn.text = text
 	btn.toggle_mode = toggle
 	btn.custom_minimum_size = Vector2(104, 38)
+	btn.clip_text = true
 	_style_button(btn, false)
 	return btn
 
@@ -435,6 +454,187 @@ func _row_origin_x() -> float:
 func _pearl_pos(_ri: int, i: int) -> Vector3:
 	return Vector3(_row_origin_x() + float(i) * PEARL_GAP, Pearl.RADIUS * 0.94 + FELT_TOP, ROW_Z[_ri])
 
+func _web_eval(code: String) -> Variant:
+	if not OS.has_feature("web"):
+		return null
+	return JavaScriptBridge.eval(code, true)
+
+
+func _css_viewport_size() -> Vector2:
+	if OS.has_feature("web"):
+		var raw = _web_eval("window.__nimView ? window.__nimView() : ''")
+		var s := str(raw)
+		if s.contains("x"):
+			var parts := s.split("x")
+			if parts.size() == 2:
+				var w := parts[0].to_float()
+				var h := parts[1].to_float()
+				if w >= 32.0 and h >= 32.0:
+					return Vector2(w, h)
+		var dpr_v = _web_eval("window.__nimDpr ? window.__nimDpr() : (window.devicePixelRatio || 1)")
+		var dpr := maxf(1.0, float(dpr_v) if dpr_v != null else 1.0)
+		var fb := _window_pixel_size()
+		if dpr > 0.0:
+			return fb / dpr
+	return _window_pixel_size()
+
+
+func _window_pixel_size() -> Vector2:
+	var win := get_window()
+	if win:
+		var px := Vector2(win.size)
+		if px.x >= 32.0 and px.y >= 32.0:
+			return px
+	var ds := Vector2(DisplayServer.window_get_size())
+	if ds.x >= 32.0 and ds.y >= 32.0:
+		return ds
+	return Vector2(390, 844)
+
+
+func _safe_insets() -> Vector4:
+	# top, right, bottom, left in CSS pixels (layout pixels after mobile content scale).
+	if OS.has_feature("web"):
+		var raw = _web_eval("window.__nimInsets ? window.__nimInsets() : '0,0,0,0'")
+		var parts := str(raw).split(",")
+		if parts.size() == 4:
+			return Vector4(parts[0].to_float(), parts[1].to_float(), parts[2].to_float(), parts[3].to_float())
+	return Vector4.ZERO
+
+
+func _sync_content_scale() -> void:
+	var win := get_window()
+	if win == null:
+		return
+	var css := _css_viewport_size()
+	win.content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
+	win.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND
+	# Phone / short landscape: design the HUD in CSS pixels so 44px buttons stay tappable.
+	# Desktop keeps the 1920x1080 stretch from project.godot.
+	if css.x >= 32.0 and css.y >= 32.0 and (css.x < 1100.0 or css.y < 700.0):
+		win.content_scale_size = Vector2i(maxi(1, int(round(css.x))), maxi(1, int(round(css.y))))
+	else:
+		win.content_scale_size = Vector2i(1920, 1080)
+
+
+func _layout_size() -> Vector2:
+	var vp := get_viewport()
+	if vp:
+		var sz := vp.get_visible_rect().size
+		if sz.x >= 32.0 and sz.y >= 32.0:
+			return sz
+	return _css_viewport_size()
+
+
+func _on_window_size_changed() -> void:
+	_apply_responsive_hud()
+
+
+func _apply_responsive_hud() -> void:
+	if hud_col == null or title_label == null:
+		return
+	_sync_content_scale()
+	var sz := _layout_size()
+	var inset := _safe_insets()
+	var compact := sz.x < 520.0 or sz.y < 720.0
+	var short := sz.y < 640.0
+	var landscape := sz.x > sz.y and sz.y < 560.0
+	var key := "%d:%d:%d:%d:%d:%d:%d:%d" % [
+		int(sz.x), int(sz.y),
+		int(inset.x), int(inset.y), int(inset.z), int(inset.w),
+		int(compact), int(landscape)
+	]
+	if key == _layout_key:
+		return
+	_layout_key = key
+
+	var pad_x := 10.0 if compact else 14.0
+	var pad_top := 6.0 if short else (8.0 if compact else 10.0)
+	var pad_bottom := 8.0 if short else (10.0 if compact else 12.0)
+	hud_col.offset_left = pad_x + inset.w
+	hud_col.offset_right = -(pad_x + inset.y)
+	hud_col.offset_top = pad_top + inset.x
+	hud_col.offset_bottom = -(pad_bottom + inset.z)
+	hud_col.add_theme_constant_override("separation", 4 if landscape else (6 if compact else 8))
+
+	var plaque_pad := 6 if landscape else (8 if compact else 10)
+	if top_plaque:
+		top_plaque.add_theme_stylebox_override("panel", _plaque(plaque_pad))
+	if bottom_plaque:
+		bottom_plaque.add_theme_stylebox_override("panel", _plaque(plaque_pad))
+	if top_box:
+		top_box.add_theme_constant_override("separation", 3 if landscape else (4 if compact else 5))
+	if bottom_box:
+		bottom_box.add_theme_constant_override("separation", 4 if landscape else (6 if compact else 8))
+
+	var title_size := 48
+	if landscape:
+		title_size = 26
+	elif short:
+		title_size = 32
+	elif compact:
+		title_size = 36
+	_apply_font(title_label, font_title, title_size, GOLD)
+	if subtitle:
+		_apply_font(subtitle, font_ui, 14 if compact else 16, PAPER)
+	if status_label:
+		_apply_font(status_label, font_ui_bold if font_ui_bold else font_ui, 15 if compact else 16, PAPER)
+	if result_title:
+		_apply_font(result_title, font_title, 28 if compact else 38, GOLD)
+	if result_sub:
+		_apply_font(result_sub, font_ui, 15 if compact else 17, PAPER)
+
+	if title_rule:
+		title_rule.visible = not landscape
+	if mode_section:
+		mode_section.visible = not landscape
+		_apply_font(mode_section, font_ui_bold if font_ui_bold else font_ui, 12 if compact else 13, MUTED)
+	if diff_section:
+		diff_section.visible = not landscape
+		_apply_font(diff_section, font_ui_bold if font_ui_bold else font_ui, 12 if compact else 13, MUTED)
+
+	_hud_btn_font = 15 if compact else 16
+	_hud_btn_pad = 8 if landscape else (10 if compact else 12)
+	var btn_h := 36.0 if landscape else (42.0 if compact else 38.0)
+	var action_h := 40.0 if landscape else (44.0 if compact else 44.0)
+	var fill := compact
+	for btn in mode_btns:
+		var b: Button = btn
+		b.custom_minimum_size = Vector2(0 if fill else 124, btn_h)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL if fill else Control.SIZE_SHRINK_CENTER
+	for btn in diff_btns:
+		var b: Button = btn
+		b.custom_minimum_size = Vector2(0 if fill else 108, btn_h)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL if fill else Control.SIZE_SHRINK_CENTER
+	if mode_row:
+		mode_row.add_theme_constant_override("separation", 6 if compact else 8)
+		mode_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if diff_row:
+		diff_row.add_theme_constant_override("separation", 6 if compact else 8)
+		diff_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if take_btn:
+		take_btn.custom_minimum_size = Vector2(0 if fill else 148, action_h)
+		take_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL if fill else Control.SIZE_SHRINK_CENTER
+	if new_btn:
+		new_btn.custom_minimum_size = Vector2(0 if fill else 156, action_h)
+		new_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL if fill else Control.SIZE_SHRINK_CENTER
+	if action_row:
+		action_row.add_theme_constant_override("separation", 8 if compact else 10)
+		action_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if result_card:
+		var card_w := 268.0
+		if compact:
+			card_w = minf(268.0, maxf(200.0, sz.x - pad_x * 2.0 - inset.y - inset.w - 24.0))
+		result_card.custom_minimum_size = Vector2(card_w, 0)
+	if table_wrap:
+		table_wrap.custom_minimum_size = Vector2(0, 72 if landscape else 96)
+	if status_label:
+		status_label.max_lines_visible = 2 if compact else -1
+
+	_refresh_mode_buttons()
+	_refresh_diff_buttons()
+	_refresh_take_button()
+
+
 func _build_ui() -> void:
 	sfx_click = AudioStreamPlayer.new()
 	sfx_take = AudioStreamPlayer.new()
@@ -456,49 +656,52 @@ func _build_ui() -> void:
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(bg)
 
-	var col := VBoxContainer.new()
-	col.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	col.offset_left = 14
-	col.offset_right = -14
-	col.offset_top = 10
-	col.offset_bottom = -12
-	col.add_theme_constant_override("separation", 8)
-	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(col)
+	hud_col = VBoxContainer.new()
+	hud_col.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	hud_col.offset_left = 14
+	hud_col.offset_right = -14
+	hud_col.offset_top = 10
+	hud_col.offset_bottom = -12
+	hud_col.add_theme_constant_override("separation", 8)
+	hud_col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(hud_col)
 
-	var top_plaque := PanelContainer.new()
+	top_plaque = PanelContainer.new()
 	top_plaque.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top_plaque.mouse_filter = Control.MOUSE_FILTER_STOP
 	top_plaque.add_theme_stylebox_override("panel", _plaque(10))
-	col.add_child(top_plaque)
+	hud_col.add_child(top_plaque)
 
-	var top := VBoxContainer.new()
-	top.alignment = BoxContainer.ALIGNMENT_CENTER
-	top.add_theme_constant_override("separation", 5)
-	top.mouse_filter = Control.MOUSE_FILTER_STOP
-	top_plaque.add_child(top)
+	top_box = VBoxContainer.new()
+	top_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	top_box.add_theme_constant_override("separation", 5)
+	top_box.mouse_filter = Control.MOUSE_FILTER_STOP
+	top_plaque.add_child(top_box)
 
-	var title := Label.new()
-	title.text = "NIM"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_apply_font(title, font_title, 48, GOLD)
-	top.add_child(title)
+	title_label = Label.new()
+	title_label.text = "NIM"
+	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_apply_font(title_label, font_title, 48, GOLD)
+	top_box.add_child(title_label)
 
-	top.add_child(_hairline(72.0, 0.78))
+	title_rule = _hairline(72.0, 0.78)
+	top_box.add_child(title_rule)
 
 	subtitle = Label.new()
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	subtitle.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_apply_font(subtitle, font_ui, 16, PAPER)
-	top.add_child(subtitle)
+	top_box.add_child(subtitle)
 
-	top.add_child(_section_label("MODE"))
-	var mode_row := HBoxContainer.new()
+	mode_section = _section_label("MODE")
+	top_box.add_child(mode_section)
+	mode_row = HBoxContainer.new()
 	mode_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	mode_row.add_theme_constant_override("separation", 8)
 	mode_row.mouse_filter = Control.MOUSE_FILTER_STOP
-	top.add_child(mode_row)
+	mode_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	top_box.add_child(mode_row)
 	for m in [PlayMode.CLASSIC, PlayMode.MISERE]:
 		var btn := _mk_btn(MODE_LABELS[m], false)
 		btn.custom_minimum_size = Vector2(124, 38)
@@ -507,12 +710,14 @@ func _build_ui() -> void:
 		mode_row.add_child(btn)
 		mode_btns.append(btn)
 
-	top.add_child(_section_label("DIFFICULTY"))
-	var diff_row := HBoxContainer.new()
+	diff_section = _section_label("DIFFICULTY")
+	top_box.add_child(diff_section)
+	diff_row = HBoxContainer.new()
 	diff_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	diff_row.add_theme_constant_override("separation", 8)
 	diff_row.mouse_filter = Control.MOUSE_FILTER_STOP
-	top.add_child(diff_row)
+	diff_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	top_box.add_child(diff_row)
 	for d in [Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD]:
 		var btn := _mk_btn(DIFF_LABELS[d], false)
 		btn.custom_minimum_size = Vector2(108, 38)
@@ -524,8 +729,10 @@ func _build_ui() -> void:
 	table_wrap = Control.new()
 	table_wrap.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	table_wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	table_wrap.size_flags_stretch_ratio = 1.0
+	table_wrap.custom_minimum_size = Vector2(0, 96)
 	table_wrap.mouse_filter = Control.MOUSE_FILTER_STOP
-	col.add_child(table_wrap)
+	hud_col.add_child(table_wrap)
 
 	var table_frame := PanelContainer.new()
 	table_frame.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -601,17 +808,17 @@ func _build_ui() -> void:
 	_apply_font(result_sub, font_ui, 17, PAPER)
 	result_box.add_child(result_sub)
 
-	var bottom_plaque := PanelContainer.new()
+	bottom_plaque = PanelContainer.new()
 	bottom_plaque.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bottom_plaque.mouse_filter = Control.MOUSE_FILTER_STOP
 	bottom_plaque.add_theme_stylebox_override("panel", _plaque(10))
-	col.add_child(bottom_plaque)
+	hud_col.add_child(bottom_plaque)
 
-	var bottom := VBoxContainer.new()
-	bottom.alignment = BoxContainer.ALIGNMENT_CENTER
-	bottom.add_theme_constant_override("separation", 8)
-	bottom.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bottom_plaque.add_child(bottom)
+	bottom_box = VBoxContainer.new()
+	bottom_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	bottom_box.add_theme_constant_override("separation", 8)
+	bottom_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bottom_plaque.add_child(bottom_box)
 
 	status_label = Label.new()
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -620,27 +827,28 @@ func _build_ui() -> void:
 	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	status_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_apply_font(status_label, font_ui_bold if font_ui_bold else font_ui, 16, PAPER)
-	bottom.add_child(status_label)
+	bottom_box.add_child(status_label)
 
 	rules_label = Label.new()
 	rules_label.visible = false
 	rules_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bottom.add_child(rules_label)
+	bottom_box.add_child(rules_label)
 
-	var new_row := HBoxContainer.new()
-	new_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	new_row.add_theme_constant_override("separation", 10)
-	bottom.add_child(new_row)
+	action_row = HBoxContainer.new()
+	action_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	action_row.add_theme_constant_override("separation", 10)
+	action_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bottom_box.add_child(action_row)
 	take_btn = _mk_btn("Take", false)
 	take_btn.custom_minimum_size = Vector2(148, 44)
 	take_btn.visible = false
 	take_btn.pressed.connect(_try_take_selected)
-	new_row.add_child(take_btn)
+	action_row.add_child(take_btn)
 	new_btn = _mk_btn("New game", false)
 	new_btn.custom_minimum_size = Vector2(156, 44)
 	_style_button(new_btn, true)
 	new_btn.pressed.connect(_on_new_game)
-	new_row.add_child(new_btn)
+	action_row.add_child(new_btn)
 
 	_refresh_mode_buttons()
 	_refresh_diff_buttons()
